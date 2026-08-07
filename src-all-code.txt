@@ -1,0 +1,8074 @@
+﻿
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\App.css
+==============================
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  position: relative;
+}
+
+#root {
+  position: relative;
+}
+
+.nova-engine {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  min-width: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+.nova-engine canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+
+  width: 100% !important;
+  height: 100% !important;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\App.jsx
+==============================
+
+import { Engine } from "./engine/core";
+
+export default function App() {
+  return <Engine />;
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\index.css
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\main.jsx
+==============================
+
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./App.css";
+import App from "./App.jsx";
+
+createRoot(document.getElementById("root")).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\components\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\assets\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraConfig.js
+==============================
+
+import CameraModes from "./CameraModes";
+
+const CameraConfig = {
+
+    mode: CameraModes.EDITOR,
+
+    moveSpeed: 0.15,
+
+    fastMoveSpeed: 0.35,
+
+    mouseSensitivity: 0.002,
+
+    maxPitch: Math.PI / 2 - 0.01,
+
+    defaultFOV: 60,
+
+    zoomSpeed: 2,
+
+    smoothness: 0.15,
+
+    near: 0.1,
+
+    far: 5000,
+
+};
+
+export default CameraConfig;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraController.jsx
+==============================
+
+import { useFrame, useThree } from "@react-three/fiber";
+
+import useEngineStore from "../../store/engineStore";
+
+import CameraManager from "./CameraManager";
+
+export default function CameraController() {
+
+    const { camera } = useThree();
+
+    const keyboard = useEngineStore(state => state.keyboard);
+    const mouse = useEngineStore(state => state.mouse);
+    const editor = useEngineStore(state => state.editor);
+    const consumeMouseMotion = useEngineStore(
+        state => state.consumeMouseMotion
+    );
+
+    useFrame((_, delta) => {
+
+        CameraManager(
+
+            camera,
+
+            keyboard,
+
+            mouse,
+
+            editor,
+
+            delta
+
+        );
+
+        if (mouse.deltaX || mouse.deltaY || mouse.wheel) {
+            consumeMouseMotion();
+        }
+
+    });
+
+    return null;
+
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraEditor.js
+==============================
+
+import { updateCameraRotation } from "./CameraRotation";
+import { updateCameraMovement } from "./CameraMovement";
+
+export function updateEditorCamera(
+    camera,
+    keyboard,
+    mouse,
+    editor,
+    delta
+) {
+
+    const speed = keyboard.ShiftLeft
+        ? editor.cameraSpeed * 2
+        : editor.cameraSpeed;
+
+    updateCameraRotation(
+        camera,
+        mouse,
+        editor.mouseSensitivity
+    );
+
+    updateCameraMovement(
+        camera,
+        keyboard,
+        speed,
+        delta
+    );
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraManager.js
+==============================
+
+import CameraModes from "./CameraModes";
+
+import { updateEditorCamera } from "./CameraEditor";
+import { updateOrbitCamera } from "./OrbitCamera";
+import updateFirstPersonCamera from "./FirstPersonCamera";
+import updateThirdPersonCamera from "./ThirdPersonCamera";
+
+export default function CameraManager(
+
+    camera,
+
+    keyboard,
+
+    mouse,
+
+    editor,
+
+    delta
+
+) {
+
+    switch (editor.mode) {
+
+        case CameraModes.EDITOR:
+
+            updateEditorCamera(
+
+                camera,
+
+                keyboard,
+
+                mouse,
+
+                editor,
+
+                delta
+
+            );
+
+            break;
+
+        case CameraModes.ORBIT:
+
+            updateOrbitCamera(
+
+                camera,
+
+                mouse,
+
+                editor
+
+            );
+
+            break;
+
+        case CameraModes.FIRST_PERSON:
+
+            updateFirstPersonCamera(
+
+                camera,
+
+                keyboard,
+
+                mouse,
+
+                editor,
+
+                delta
+
+            );
+
+            break;
+
+        case CameraModes.THIRD_PERSON:
+
+            updateThirdPersonCamera(
+
+                camera
+
+            );
+
+            break;
+
+        case CameraModes.CINEMATIC:
+
+            // Coming Later
+
+            break;
+
+        default:
+
+            updateEditorCamera(
+
+                camera,
+
+                keyboard,
+
+                mouse,
+
+                editor,
+
+                delta
+
+            );
+
+            break;
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraMath.js
+==============================
+
+import * as THREE from "three";
+
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+
+export function getForward(camera) {
+
+    camera.getWorldDirection(forward);
+
+    forward.y = 0;
+
+    return forward.normalize();
+
+}
+
+export function getRight(camera) {
+
+    camera.getWorldDirection(forward);
+
+    forward.y = 0;
+
+    forward.normalize();
+
+    right.crossVectors(forward, camera.up);
+
+    return right.normalize();
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraModes.js
+==============================
+
+const CameraModes = {
+
+    EDITOR: "editor",
+
+    FIRST_PERSON: "firstPerson",
+
+    THIRD_PERSON: "thirdPerson",
+
+    ORBIT: "orbit",
+
+    CINEMATIC: "cinematic",
+
+};
+
+export default CameraModes;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraMovement.js
+==============================
+
+import * as THREE from "three";
+
+const direction = new THREE.Vector3();
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+
+export function updateCameraMovement(
+    camera,
+    keyboard,
+    speed,
+    delta
+) {
+
+    direction.set(0,0,0);
+
+    camera.getWorldDirection(forward);
+
+    forward.y = 0;
+
+    forward.normalize();
+
+    right.crossVectors(
+        forward,
+        camera.up
+    ).normalize();
+
+    if (keyboard.KeyW)
+        direction.add(forward);
+
+    if (keyboard.KeyS)
+        direction.sub(forward);
+
+    if (keyboard.KeyA)
+        direction.sub(right);
+
+    if (keyboard.KeyD)
+        direction.add(right);
+
+    if (keyboard.Space)
+        direction.y += 1;
+
+    if (keyboard.ControlLeft)
+        direction.y -= 1;
+
+    if (direction.lengthSq() > 0)
+        direction.normalize();
+
+    camera.position.addScaledVector(
+        direction,
+        speed * delta * 60
+    );
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraRotation.js
+==============================
+
+import * as THREE from "three";
+
+const target = new THREE.Vector3();
+
+let yaw = 0;
+let pitch = 0;
+
+let initialized = false;
+
+export function updateCameraRotation(
+    camera,
+    mouse,
+    sensitivity
+) {
+
+    if (!initialized) {
+
+    const direction = new THREE.Vector3();
+
+    camera.getWorldDirection(direction);
+
+    pitch = Math.asin(direction.y);
+
+    yaw = Math.atan2(direction.x, direction.z);
+
+    initialized = true;
+
+}
+
+    // Left drag is reserved for selection and gizmo manipulation.
+    if (!mouse.right)
+        return;
+
+    yaw -= mouse.deltaX * sensitivity;
+
+    pitch -= mouse.deltaY * sensitivity;
+
+    const limit = Math.PI / 2 - 0.01;
+
+    pitch = Math.max(
+        -limit,
+        Math.min(limit, pitch)
+    );
+
+    target.set(
+
+        Math.cos(pitch) * Math.sin(yaw),
+
+        Math.sin(pitch),
+
+        Math.cos(pitch) * Math.cos(yaw)
+
+    );
+
+    target.add(camera.position);
+
+    camera.lookAt(target);
+
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraShortcuts.js
+==============================
+
+import CameraModes from "./CameraModes";
+import useEngineStore from "../../store/engineStore";
+
+export default function initializeCameraShortcuts() {
+
+    const onKeyDown = (event) => {
+
+        const { setEditor } = useEngineStore.getState();
+
+        switch (event.code) {
+
+            case "Digit1":
+
+                setEditor({
+                    mode: CameraModes.EDITOR,
+                });
+
+                console.log("Editor Camera");
+
+                break;
+
+            case "Digit2":
+
+                setEditor({
+                    mode: CameraModes.ORBIT,
+                });
+
+                console.log("Orbit Camera");
+
+                break;
+
+            case "Digit3":
+
+                setEditor({
+                    mode: CameraModes.FIRST_PERSON,
+                });
+
+                console.log("First Person");
+
+                break;
+
+            case "Digit4":
+
+                setEditor({
+                    mode: CameraModes.THIRD_PERSON,
+                });
+
+                console.log("Third Person");
+
+                break;
+
+            case "Digit5":
+
+                setEditor({
+                    mode: CameraModes.CINEMATIC,
+                });
+
+                console.log("Cinematic Camera (Coming Soon)");
+
+                break;
+
+            default:
+                break;
+        }
+
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+        window.removeEventListener("keydown", onKeyDown);
+    };
+
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\FirstPersonCamera.js
+==============================
+
+import { updateCameraRotation } from "./CameraRotation";
+import { updateCameraMovement } from "./CameraMovement";
+
+export default function updateFirstPersonCamera(
+    camera,
+    keyboard,
+    mouse,
+    editor,
+    delta
+) {
+
+    updateCameraRotation(
+        camera,
+        mouse,
+        editor.mouseSensitivity
+    );
+
+    updateCameraMovement(
+        camera,
+        keyboard,
+        editor.cameraSpeed * 0.6,
+        delta
+    );
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\index.js
+==============================
+
+export { default as CameraController } from "./CameraController";
+export { default as CameraManager } from "./CameraManager";
+export { default as CameraModes } from "./CameraModes";
+export { default as CameraConfig } from "./CameraConfig";
+export { default as CameraShortcuts } from "./CameraShortcuts";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\OrbitCamera.js
+==============================
+
+import * as THREE from "three";
+
+const target = new THREE.Vector3(0, 0, 0);
+
+let yaw = 0;
+let pitch = 0;
+let distance = 8;
+
+export function updateOrbitCamera(
+    camera,
+    mouse,
+    editor
+) {
+
+    if (mouse.left) {
+
+        yaw -= mouse.deltaX * editor.mouseSensitivity;
+
+        pitch -= mouse.deltaY * editor.mouseSensitivity;
+
+    }
+
+    const limit = Math.PI / 2 - 0.01;
+
+    pitch = Math.max(
+        -limit,
+        Math.min(limit, pitch)
+    );
+
+    distance += mouse.wheel * 0.01;
+
+    distance = THREE.MathUtils.clamp(
+        distance,
+        2,
+        50
+    );
+
+    camera.position.set(
+
+        target.x +
+            Math.cos(pitch) *
+            Math.sin(yaw) *
+            distance,
+
+        target.y +
+            Math.sin(pitch) *
+            distance,
+
+        target.z +
+            Math.cos(pitch) *
+            Math.cos(yaw) *
+            distance
+
+    );
+
+    camera.lookAt(target);
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\ThirdPersonCamera.js
+==============================
+
+import * as THREE from "three";
+
+const offset = new THREE.Vector3(0, 2, 6);
+const target = new THREE.Vector3();
+
+export default function updateThirdPersonCamera(
+    camera
+) {
+
+    target.set(0, 0, 0);
+
+    camera.position.lerp(
+
+        offset,
+
+        0.1
+
+    );
+
+    camera.lookAt(target);
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\CityConfig.js
+==============================
+
+const CityConfig = {
+
+    roadWidth: 6,
+
+    roadLength: 20,
+
+    sidewalkWidth: 1,
+
+    blockSpacing: 35,
+
+};
+
+export default CityConfig;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\index.js
+==============================
+
+// import CityBlock from "./CityBlock";
+
+// export default function CityGenerator() {
+//   return (
+//     <>
+//       <CityBlock position={[-15, 0, -15]} />
+//       <CityBlock position={[15, 0, -15]} />
+//       <CityBlock position={[-15, 0, 15]} />
+//       <CityBlock position={[15, 0, 15]} />
+//     </>
+//   );
+// }
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\blocks\CityBlock.jsx
+==============================
+
+import Road from "../roads/Road";
+import Building from "../buildings/Building";
+
+export default function CityBlock({ position = [0, 0, 0] } = {}) {
+  console.log("[CityBlock] Creating:", position);
+
+  const [x, y, z] = position;
+
+  Road({
+    position: [x, y, z],
+  });
+
+  Building({
+    position: [x - 6, y, z - 6],
+    height: 8,
+  });
+
+  Building({
+    position: [x + 6, y, z - 6],
+    height: 12,
+  });
+
+  Building({
+    position: [x - 6, y, z + 6],
+    height: 10,
+  });
+
+  Building({
+    position: [x + 6, y, z + 6],
+    height: 7,
+  });
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\buildings\Building.jsx
+==============================
+
+import * as THREE from "three";
+
+import EntityFactory from "../../entity/EntityFactory";
+import World from "../../world/World";
+
+import { createBuildingMaterial } from "../../materials/MaterialFactory";
+
+export default function Building({
+  position = [0, 0, 0],
+  width = 4,
+  height = 8,
+  depth = 4,
+} = {}) {
+  console.log("[Building] Creating", {
+    position,
+    width,
+    height,
+    depth,
+  });
+
+  const entity = EntityFactory.createGroupEntity({
+    name: "Building",
+    type: "Building",
+  });
+
+  if (!entity) {
+    console.error("[Building] Failed to create entity");
+    return null;
+  }
+
+  const material = createBuildingMaterial();
+
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(width, height, depth),
+    material,
+  );
+
+  mesh.position.set(0, height / 2, 0);
+
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  mesh.userData.ignoreRaycast = false;
+
+  entity.getObject().add(mesh);
+
+  entity.transform.setPosition(
+    position[0] ?? 0,
+    position[1] ?? 0,
+    position[2] ?? 0,
+  );
+
+  entity.syncTransformToObject();
+
+  World.spawn(entity);
+
+  return entity;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\generators\BuildingGenerator.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\generators\CityGenerator.jsx
+==============================
+
+import { useEffect } from "react";
+
+import CityBlock from "../blocks/CityBlock";
+
+export default function CityGenerator() {
+  useEffect(() => {
+    console.log("[CityGenerator] Starting city generation");
+
+    const spacing = 35;
+
+    CityBlock({
+      position: [-spacing, 0, -spacing],
+    });
+
+    CityBlock({
+      position: [spacing, 0, -spacing],
+    });
+
+    CityBlock({
+      position: [-spacing, 0, spacing],
+    });
+
+    CityBlock({
+      position: [spacing, 0, spacing],
+    });
+
+    console.log("[CityGenerator] City generation complete");
+  }, []);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\generators\RoadGenerator.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\roads\Road.jsx
+==============================
+
+import * as THREE from "three";
+
+import EntityFactory from "../../entity/EntityFactory";
+import World from "../../world/World";
+
+export default function Road({ position = [0, 0, 0] } = {}) {
+  console.log("[Road] Creating:", position);
+
+  const entity = EntityFactory.createGroupEntity({
+    name: "Road",
+    type: "Road",
+  });
+
+  if (!entity) {
+    console.error("[Road] Failed to create entity");
+    return null;
+  }
+
+  // --------------------------------------------------
+  // Asphalt
+  // --------------------------------------------------
+
+  const asphalt = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 6),
+    new THREE.MeshStandardMaterial({
+      color: "#2d2d2d",
+    }),
+  );
+
+  asphalt.rotation.x = -Math.PI / 2;
+  asphalt.receiveShadow = true;
+
+  // --------------------------------------------------
+  // Center Line
+  // --------------------------------------------------
+
+  const centerLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 0.15),
+    new THREE.MeshStandardMaterial({
+      color: "#ffd400",
+    }),
+  );
+
+  centerLine.rotation.x = -Math.PI / 2;
+  centerLine.position.y = 0.02;
+
+  // --------------------------------------------------
+  // Sidewalk
+  // --------------------------------------------------
+
+  const sidewalkMaterial = new THREE.MeshStandardMaterial({
+    color: "#bdbdbd",
+  });
+
+  const sidewalkLeft = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 1),
+    sidewalkMaterial,
+  );
+
+  sidewalkLeft.rotation.x = -Math.PI / 2;
+  sidewalkLeft.position.set(-3.5, 0.05, 0);
+
+  const sidewalkRight = sidewalkLeft.clone();
+
+  sidewalkRight.position.x = 3.5;
+
+  // --------------------------------------------------
+  // Hierarchy
+  // --------------------------------------------------
+
+  const root = entity.getObject();
+
+  root.add(asphalt);
+  root.add(centerLine);
+  root.add(sidewalkLeft);
+  root.add(sidewalkRight);
+
+  // --------------------------------------------------
+  // Transform
+  // --------------------------------------------------
+
+  entity.transform.setPosition(
+    position[0] ?? 0,
+    position[1] ?? 0,
+    position[2] ?? 0,
+  );
+
+  entity.syncTransformToObject();
+
+  // --------------------------------------------------
+  // Spawn
+  // --------------------------------------------------
+
+  World.spawn(entity);
+
+  return entity;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\roads\RoadIntersection.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\roads\components\Asphalt.jsx
+==============================
+
+export default function Asphalt() {
+  return (
+    <mesh
+      name="Road_Asphalt"
+      rotation={[-Math.PI / 2, 0, 0]}
+      receiveShadow
+      userData={{
+        ignoreRaycast: false,
+      }}
+    >
+      <planeGeometry args={[20, 6]} />
+
+      <meshStandardMaterial color="#2d2d2d" />
+    </mesh>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\roads\components\CenterLine.jsx
+==============================
+
+export default function CenterLine() {
+  return (
+    <mesh
+      name="Road_CenterLine"
+      position={[0, 0.02, 0]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      userData={{
+        ignoreRaycast: false,
+      }}
+    >
+      <planeGeometry args={[20, 0.15]} />
+
+      <meshStandardMaterial color="#ffd400" />
+    </mesh>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\roads\components\Sidewalk.jsx
+==============================
+
+export default function Sidewalk({ x = 0 }) {
+  return (
+    <mesh
+      name="Road_Sidewalk"
+      position={[x, 0.05, 0]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      receiveShadow
+      userData={{
+        ignoreRaycast: false,
+      }}
+    >
+      <planeGeometry args={[20, 1]} />
+
+      <meshStandardMaterial color="#bdbdbd" />
+    </mesh>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\utils\CityMath.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\controls\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\controls\Keyboard.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\controls\Mouse.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\core\Engine.jsx
+==============================
+
+import { useEffect } from "react";
+
+import EngineProvider from "./EngineProvider";
+import EngineCanvas from "../renderer/EngineCanvas";
+
+import KeyboardDebugger from "../../game/ui/KeyboardDebugger";
+
+import initializeKeyboardInput from "../input/KeyboardInput";
+import initializeMouseInput from "../input/MouseInput";
+import initializeCameraShortcuts from "../camera/CameraShortcuts";
+
+import EditorManager from "../editor/EditorManager";
+import PerformanceManager from "../performance/PerformanceManager";
+
+export default function Engine() {
+  //--------------------------------------------------
+  // Initialize Input
+  //--------------------------------------------------
+
+  useEffect(() => {
+    const disposeKeyboard = initializeKeyboardInput();
+    const disposeMouse = initializeMouseInput();
+    const disposeCameraShortcuts = initializeCameraShortcuts();
+
+    return () => {
+      disposeKeyboard();
+      disposeMouse();
+      disposeCameraShortcuts();
+    };
+  }, []);
+
+  //--------------------------------------------------
+  // Disable Browser Context Menu
+  //--------------------------------------------------
+
+  useEffect(() => {
+    const preventMenu = (event) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener("contextmenu", preventMenu);
+
+    return () => {
+      window.removeEventListener("contextmenu", preventMenu);
+    };
+  }, []);
+
+  //--------------------------------------------------
+  // Prevent Browser Drag
+  //--------------------------------------------------
+
+  useEffect(() => {
+    const preventDrag = (event) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener("dragstart", preventDrag);
+
+    return () => {
+      window.removeEventListener("dragstart", preventDrag);
+    };
+  }, []);
+
+  //--------------------------------------------------
+  // Render
+  //--------------------------------------------------
+
+  return (
+    <EngineProvider>
+      <div
+        className="nova-engine"
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+        }}
+      >
+        {/* ================================================
+            3D ENGINE
+        ================================================= */}
+
+        <EngineCanvas />
+
+        {/* ================================================
+            EDITOR UI
+            Must stay OUTSIDE the R3F Canvas
+        ================================================= */}
+
+        <EditorManager />
+
+        {/* ================================================
+            PERFORMANCE UI
+            Must stay OUTSIDE the R3F Canvas
+        ================================================= */}
+
+        <PerformanceManager />
+
+        {/* ================================================
+            DEBUG UI
+        ================================================= */}
+
+        <KeyboardDebugger />
+      </div>
+    </EngineProvider>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\core\EngineConfig.js
+==============================
+
+const EngineConfig = {
+
+    graphics: {
+
+        shadows: true,
+
+        antialias: true,
+
+        maxPixelRatio: 2,
+
+        targetFPS: 60,
+
+    },
+
+    world: {
+
+        gravity: -9.81,
+
+    },
+
+    debug: {
+
+        showFPS: true,
+
+        showGrid: true,
+
+        showAxis: true,
+
+    }
+
+};
+
+export default EngineConfig;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\core\EngineContext.js
+==============================
+
+import { createContext } from "react";
+
+const EngineContext = createContext(null);
+
+export default EngineContext;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\core\EngineProvider.jsx
+==============================
+
+import EngineContext from "./EngineContext";
+import EngineConfig from "./EngineConfig";
+
+export default function EngineProvider({ children }) {
+  const engine = {
+    config: EngineConfig,
+  };
+
+  return (
+    <EngineContext.Provider value={engine}>
+      {children}
+    </EngineContext.Provider>
+  );
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\core\index.js
+==============================
+
+export { default as Engine } from "./Engine";
+export { default as EngineConfig } from "./EngineConfig";
+export { default as EngineContext } from "./EngineContext";
+export { default as EngineProvider } from "./EngineProvider";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\debug\AxesHelper.jsx
+==============================
+
+import { useMemo } from "react";
+import * as THREE from "three";
+
+export default function AxesHelper() {
+  const helper = useMemo(() => new THREE.AxesHelper(5), []);
+
+  return <primitive object={helper} />;
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\debug\DebugEntity.jsx
+==============================
+
+import { useEffect } from "react";
+import * as THREE from "three";
+
+import { EntityFactory } from "../entity";
+import World from "../world/World";
+
+export default function DebugEntity() {
+  useEffect(() => {
+    console.log("========================================");
+    console.log("[DebugEntity] Effect started");
+    console.log("========================================");
+
+    const entities = [];
+
+    function createCube(name, x, color) {
+      console.log("[DebugEntity] Creating cube:", {
+        name,
+        x,
+        color,
+      });
+
+      // --------------------------------------------------
+      // Create entity
+      // --------------------------------------------------
+
+      const entity = EntityFactory.createMeshEntity({
+        name,
+        type: "Mesh",
+        geometry: new THREE.BoxGeometry(1, 1, 1),
+        material: new THREE.MeshStandardMaterial({
+          color,
+        }),
+      });
+
+      // --------------------------------------------------
+      // Validate
+      // --------------------------------------------------
+
+      if (!entity) {
+        console.error("[DebugEntity] FAILED: EntityFactory returned null");
+
+        return null;
+      }
+
+      console.log("[DebugEntity] Entity created:", entity);
+
+      // --------------------------------------------------
+      // Transform
+      // --------------------------------------------------
+
+      entity.transform.setPosition(x, 0.5, 0);
+
+      console.log("[DebugEntity] Transform set:", entity.transform.position);
+
+      // --------------------------------------------------
+      // Spawn
+      // --------------------------------------------------
+
+      World.spawn(entity);
+
+      console.log("[DebugEntity] Entity spawned:", entity.name);
+
+      entities.push(entity);
+
+      return entity;
+    }
+
+    // --------------------------------------------------
+    // Test Cube
+    // --------------------------------------------------
+
+    createCube("Cube", 0, "orange");
+
+    console.log("[DebugEntity] Effect completed successfully");
+
+    // --------------------------------------------------
+    // Cleanup
+    // --------------------------------------------------
+
+    return () => {
+      console.log("[DebugEntity] Cleanup. Entities:", entities.length);
+
+      entities.forEach((entity) => {
+        if (!entity) {
+          return;
+        }
+
+        if (World.running) {
+          World.despawn(entity);
+        }
+      });
+    };
+  }, []);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\debug\DebugSettings.js
+==============================
+
+const DebugSettings = {
+
+    showGrid: true,
+
+    showAxis: true,
+
+    showFPS: true,
+
+    showPhysics: false,
+
+    showNavigation: false,
+
+    spawnTestObjects: true,
+
+};
+
+export default DebugSettings;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\debug\DebugWorld.jsx
+==============================
+
+import GridHelper from "./GridHelper";
+import AxesHelper from "./AxesHelper";
+import DebugEntity from "./DebugEntity";
+import DebugSettings from "./DebugSettings";
+
+export default function DebugWorld() {
+
+    return (
+
+        <>
+
+            {DebugSettings.showGrid && <GridHelper />}
+
+            {DebugSettings.showAxis && <AxesHelper />}
+
+            {DebugSettings.spawnTestObjects && <DebugEntity />}
+
+        </>
+
+    );
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\debug\GridHelper.jsx
+==============================
+
+import { Grid } from "@react-three/drei";
+
+export default function GridHelper() {
+  return (
+    <Grid
+      args={[100, 100]}
+      cellSize={1}
+      cellThickness={0.5}
+      sectionSize={10}
+      sectionThickness={1.5}
+      fadeDistance={150}
+      infiniteGrid
+    />
+  );
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\debug\index.js
+==============================
+
+export { default as DebugWorld } from "./DebugWorld";
+
+export { default as AxesHelper } from "./AxesHelper";
+
+export { default as GridHelper } from "./GridHelper";
+
+export { default as DebugEntity } from "./DebugEntity";
+
+export { default as DebugSettings } from "./DebugSettings";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\EditorManager.jsx
+==============================
+
+import { useEffect } from "react";
+
+import useEngineStore from "../../store/engineStore";
+
+import Hierarchy from "./hierarchy/Hierarchy";
+import Inspector from "./inspector/Inspector";
+
+export default function EditorManager() {
+  const editor = useEngineStore((state) => state.editor);
+
+  useEffect(() => {
+    if (!editor.enabled) return;
+
+    console.log("Nova Editor Started");
+  }, [editor.enabled]);
+
+  if (!editor.enabled) {
+    return null;
+  }
+
+  return (
+    <div
+      data-nova-editor="true"
+      style={{
+        position: "absolute",
+
+        top: 10,
+        left: 10,
+
+        width: 240,
+
+        maxHeight: "calc(100vh - 20px)",
+
+        overflowY: "auto",
+
+        background: "#202020",
+        color: "#fff",
+
+        border: "1px solid #444",
+        borderRadius: 6,
+
+        padding: 10,
+
+        boxSizing: "border-box",
+
+        fontFamily: "Arial, sans-serif",
+        fontSize: 13,
+
+        zIndex: 100,
+      }}
+    >
+      {/* ============================================================
+          HIERARCHY
+      ============================================================ */}
+
+      <Hierarchy />
+
+      {/* ============================================================
+          INSPECTOR
+      ============================================================ */}
+
+      <div
+        style={{
+          marginTop: 12,
+          paddingTop: 12,
+
+          borderTop: "1px solid #444",
+        }}
+      >
+        <Inspector />
+      </div>
+    </div>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\EditorScene.jsx
+==============================
+
+import EditorRaycaster from "./selection/EditorRaycaster";
+import EditorShortcuts from "./shortcuts/EditorShortcuts";
+
+import { EditorVisualManager } from "./visuals";
+
+export default function EditorScene() {
+  return (
+    <>
+      <EditorRaycaster />
+
+      <EditorVisualManager />
+
+      <EditorShortcuts />
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\EditorSettings.js
+==============================
+
+const EditorSettings = {
+
+    //----------------------------------
+    // Camera
+    //----------------------------------
+
+    DefaultSpeed: 0.15,
+
+    FastSpeed: 0.35,
+
+    MouseSensitivity: 0.002,
+
+    //----------------------------------
+    // Grid
+    //----------------------------------
+
+    GridSize: 1000,
+
+    GridDivisions: 100,
+
+    //----------------------------------
+    // Selection
+    //----------------------------------
+
+    OutlineColor: "#4da3ff",
+
+    OutlineStrength: 3,
+
+    //----------------------------------
+    // Transform
+    //----------------------------------
+
+    SnapMove: 1,
+
+    SnapRotate: 15,
+
+    SnapScale: 0.1,
+
+};
+
+export default EditorSettings;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\index.js
+==============================
+
+export { default as EditorManager } from "./EditorManager";
+export { default as EditorScene } from "./EditorScene";
+
+export * from "./selection";
+export * from "./transform";
+export * from "./shortcuts";
+export * from "./hierarchy";
+export * from "./inspector";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoController.js
+==============================
+
+import GizmoState from "./GizmoState";
+
+class GizmoController {
+  select(entity) {
+    console.log("========== GIZMO CONTROLLER SELECT ==========");
+    console.log("Entity:", entity);
+
+    GizmoState.entity = entity;
+
+    console.log("GizmoState.entity:", GizmoState.entity);
+  }
+
+  clear() {
+    console.log("========== GIZMO CONTROLLER CLEAR ==========");
+
+    GizmoState.entity = null;
+    GizmoState.axis = null;
+    GizmoState.hoveredAxis = null;
+    GizmoState.dragging = false;
+  }
+
+  getSelectedEntity() {
+    return GizmoState.entity;
+  }
+
+  beginDrag(axis) {
+    console.log("========== GIZMO CONTROLLER BEGIN DRAG ==========");
+    console.log("Axis:", axis);
+
+    GizmoState.axis = axis;
+    GizmoState.dragging = true;
+  }
+
+  updateDrag(pointer) {
+    if (!GizmoState.dragging) {
+      return;
+    }
+
+    GizmoState.pointer = pointer;
+  }
+
+  endDrag() {
+    console.log("========== GIZMO CONTROLLER END DRAG ==========");
+
+    GizmoState.dragging = false;
+    GizmoState.axis = null;
+  }
+
+  setMode(mode) {
+    console.log("========== GIZMO MODE ==========");
+    console.log("Mode:", mode);
+
+    GizmoState.mode = mode;
+  }
+
+  setHovered(axis) {
+    console.log("========== GIZMO HOVER STATE ==========");
+    console.log("Axis:", axis);
+
+    GizmoState.hoveredAxis = axis;
+  }
+}
+
+export default new GizmoController();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoEvents.js
+==============================
+
+export default {
+  SELECT: "gizmo:select",
+
+  DESELECT: "gizmo:deselect",
+
+  HOVER: "gizmo:hover",
+
+  UNHOVER: "gizmo:unhover",
+
+  DRAG_START: "gizmo:start",
+
+  DRAG: "gizmo:drag",
+
+  DRAG_END: "gizmo:end",
+
+  MODE_CHANGED: "gizmo:mode",
+};
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoManager.jsx
+==============================
+
+import { useEffect } from "react";
+import { useThree } from "@react-three/fiber";
+
+import useEngineStore from "../../../store/engineStore";
+
+import GizmoController from "./GizmoController";
+import GizmoHoverController from "./interaction/GizmoHoverController";
+
+import MoveGizmo from "./Move/MoveGizmo";
+import RotateGizmo from "./Rotate/RotateGizmo";
+import ScaleGizmo from "./Scale/ScaleGizmo";
+
+import GizmoInteraction from "./interaction/GizmoInteraction";
+import GizmoDragController from "./interaction/GizmoDragController";
+import GizmoDragPlane from "./interaction/GizmoDragPlane";
+import GizmoRaycaster from "./interaction/GizmoRaycaster";
+
+export default function GizmoManager() {
+  const selectedEntity = useEngineStore((state) => state.editor.selectedEntity);
+
+  const { camera } = useThree();
+
+  // ============================================================
+  // SELECTION CHANGE
+  // ============================================================
+
+  useEffect(() => {
+    console.log("========== GIZMO SELECTION ==========");
+    console.log("Selected Entity:", selectedEntity);
+
+    if (!selectedEntity) {
+      console.log("No selected entity -> clearing gizmo");
+
+      GizmoController.clear();
+      GizmoHoverController.clear();
+      return;
+    }
+
+    GizmoController.select(selectedEntity);
+  }, [selectedEntity]);
+
+  useEffect(() => {
+    const handlePointerUp = () => {
+      if (GizmoDragController.isDragging()) {
+        GizmoDragController.end();
+      }
+    };
+
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, []);
+
+  // ============================================================
+  // NO ENTITY
+  // ============================================================
+
+  if (!selectedEntity) {
+    return null;
+  }
+
+  // ============================================================
+  // POINTER DOWN
+  // ============================================================
+
+  const handlePointerDown = (event, axis) => {
+    event.stopPropagation();
+    event.nativeEvent?.stopPropagation();
+
+    console.log("");
+    console.log("========================================");
+    console.log("========== GIZMO AXIS CLICK ==========");
+    console.log("========================================");
+
+    console.log("Clicked Axis:", axis);
+    console.log("Selected Entity:", selectedEntity);
+
+    const object = selectedEntity?.getObject?.();
+
+    console.log("Object:", object);
+
+    if (!object) {
+      console.warn("GIZMO ERROR: Selected entity has no object");
+      return;
+    }
+
+    console.log("Object Position:", object.position);
+
+    // ------------------------------------------------------------
+    // Build drag plane
+    // ------------------------------------------------------------
+
+    const plane = GizmoDragPlane.build(
+      axis,
+      object.position,
+      camera,
+      event.ray.direction,
+    );
+
+    console.log("Drag Axis:", axis);
+    console.log("Created Drag Plane:", plane);
+
+    if (!plane) {
+      console.warn("GIZMO ERROR: Drag plane was not created");
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // Start drag
+    // ------------------------------------------------------------
+
+    const startPoint = GizmoRaycaster.intersectPlane(
+      camera,
+      event.pointer,
+      plane,
+    );
+
+    if (!startPoint) {
+      console.warn("GIZMO ERROR: Pointer did not intersect drag plane");
+      return;
+    }
+
+    GizmoDragController.begin(
+      axis,
+      object.position.clone(),
+      plane,
+      startPoint,
+    );
+
+    console.log("========== DRAG STARTED ==========");
+    console.log("Axis:", axis);
+    console.log("Object Position:", object.position);
+    console.log("==================================");
+    console.log("");
+  };
+
+  // ============================================================
+  // POINTER OVER
+  // ============================================================
+
+  const handlePointerOver = (event, axis) => {
+    event.stopPropagation();
+
+    console.log("========== GIZMO HOVER ==========");
+    console.log("Hover Axis:", axis);
+
+    GizmoController.setHovered(axis);
+    GizmoHoverController.enter(axis);
+  };
+
+  // ============================================================
+  // POINTER OUT
+  // ============================================================
+
+  const handlePointerOut = (event) => {
+    event.stopPropagation();
+
+    console.log("========== GIZMO HOVER OUT ==========");
+
+    GizmoController.setHovered(null);
+    GizmoHoverController.leave();
+  };
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+
+  return (
+    <>
+      {/* Handles drag calculation every frame */}
+      <GizmoInteraction />
+
+      {/* MOVE GIZMO */}
+      <MoveGizmo
+        entity={selectedEntity}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      />
+
+      {/* ROTATE - DISABLED FOR NOW */}
+      {/*
+      <RotateGizmo
+        entity={selectedEntity}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      />
+      */}
+
+      {/* SCALE - DISABLED FOR NOW */}
+      {/*
+      <ScaleGizmo
+        entity={selectedEntity}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      />
+      */}
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoMath.js
+==============================
+
+import * as THREE from "three";
+
+class GizmoMath {
+  static snap(value, size) {
+    return Math.round(value / size) * size;
+  }
+
+  static axisVector(axis) {
+    switch (axis) {
+      case "x":
+        return new THREE.Vector3(1, 0, 0);
+
+      case "y":
+        return new THREE.Vector3(0, 1, 0);
+
+      case "z":
+        return new THREE.Vector3(0, 0, 1);
+
+      default:
+        return new THREE.Vector3();
+    }
+  }
+}
+
+export default GizmoMath;
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoState.js
+==============================
+
+import { GIZMO_MODES, GIZMO_SPACE } from "./shared/GizmoConstants";
+
+class GizmoState {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.mode = GIZMO_MODES.MOVE;
+
+    this.space = GIZMO_SPACE.WORLD;
+
+    this.entity = null;
+
+    this.axis = null;
+
+    this.hoveredAxis = null;
+
+    this.dragging = false;
+
+    this.dragOrigin = null;
+
+    this.dragPlane = null;
+
+    this.pointer = null;
+  }
+}
+
+export default new GizmoState();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\index.js
+==============================
+
+export { default as GizmoManager } from "./GizmoManager";
+
+export { default as MoveGizmo } from "./Move/MoveGizmo";
+
+export { default as RotateGizmo } from "./Rotate/RotateGizmo";
+
+export { default as ScaleGizmo } from "./Scale/ScaleGizmo";
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoDragController.js
+==============================
+
+import * as THREE from "three";
+
+import GizmoState from "../GizmoState";
+import GizmoMoveController from "./GizmoMoveController";
+
+class GizmoDragController {
+  constructor() {
+    this.startPoint = new THREE.Vector3();
+    this.currentPoint = new THREE.Vector3();
+    this.delta = new THREE.Vector3();
+  }
+
+  // ============================================================
+  // BEGIN DRAG
+  // ============================================================
+
+  begin(axis, origin, plane, startPoint = origin) {
+    console.log("");
+    console.log("========================================");
+    console.log("========== DRAG BEGIN ==========");
+    console.log("========================================");
+
+    console.log("Axis:", axis);
+    console.log("Entity:", GizmoState.entity);
+    console.log("Origin:", origin);
+    console.log("Plane:", plane);
+
+    if (!GizmoState.entity) {
+      console.warn("DRAG BEGIN FAILED: GizmoState.entity is null");
+
+      return;
+    }
+
+    GizmoState.axis = axis;
+
+    GizmoState.dragOrigin = origin ? origin.clone() : new THREE.Vector3();
+
+    GizmoState.dragPlane = plane;
+
+    GizmoState.pointer = null;
+
+    GizmoState.dragging = true;
+
+    this.startPoint.copy(startPoint);
+
+    this.currentPoint.copy(startPoint);
+
+    this.delta.set(0, 0, 0);
+
+    GizmoMoveController.reset();
+
+    console.log("Drag started.");
+    console.log("GizmoState.entity:", GizmoState.entity);
+    console.log("GizmoState.axis:", GizmoState.axis);
+    console.log("GizmoState.dragging:", GizmoState.dragging);
+    console.log("Start Point:", this.startPoint);
+
+    console.log("========================================");
+    console.log("");
+  }
+
+  // ============================================================
+  // UPDATE
+  // ============================================================
+
+  update(pointer) {
+    if (!GizmoState.dragging) {
+      return null;
+    }
+
+    if (!pointer) {
+      console.warn("DRAG UPDATE: Pointer intersection is null");
+
+      return null;
+    }
+
+    this.currentPoint.copy(pointer);
+
+    this.delta.subVectors(this.currentPoint, this.startPoint);
+
+    GizmoState.pointer = this.currentPoint.clone();
+
+    return this.delta.clone();
+  }
+
+  // ============================================================
+  // END
+  // ============================================================
+
+  end() {
+    console.log("");
+    console.log("========== DRAG END ==========");
+
+    console.log("Final Axis:", GizmoState.axis);
+    console.log("Final Pointer:", GizmoState.pointer);
+    console.log("Final Delta:", this.delta);
+
+    GizmoMoveController.reset();
+
+    GizmoState.dragging = false;
+
+    GizmoState.axis = null;
+
+    GizmoState.dragOrigin = null;
+
+    GizmoState.dragPlane = null;
+
+    GizmoState.pointer = null;
+
+    this.startPoint.set(0, 0, 0);
+
+    this.currentPoint.set(0, 0, 0);
+
+    this.delta.set(0, 0, 0);
+
+    console.log("Dragging:", GizmoState.dragging);
+  }
+
+  // ============================================================
+  // GET DELTA
+  // ============================================================
+
+  getDelta() {
+    return this.delta.clone();
+  }
+
+  // ============================================================
+  // IS DRAGGING
+  // ============================================================
+
+  isDragging() {
+    return GizmoState.dragging;
+  }
+}
+
+export default new GizmoDragController();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoDragPlane.js
+==============================
+
+import * as THREE from "three";
+
+class GizmoDragPlane {
+  constructor() {
+    this.plane = new THREE.Plane();
+  }
+
+  build(axis, origin, camera, pointerRayDirection) {
+    const normal = new THREE.Vector3();
+    const axisDirection = new THREE.Vector3();
+
+    switch (axis) {
+      case "x":
+        axisDirection.set(1, 0, 0);
+        break;
+
+      case "y":
+        axisDirection.set(0, 1, 0);
+        break;
+
+      case "z":
+        axisDirection.set(0, 0, 1);
+        break;
+
+      case "xy":
+        normal.set(0, 0, 1);
+        break;
+
+      case "xz":
+        normal.set(0, 1, 0);
+        break;
+
+      case "yz":
+        normal.set(1, 0, 0);
+        break;
+
+      default:
+        normal.copy(camera.getWorldDirection(new THREE.Vector3()));
+        break;
+    }
+
+    if (axisDirection.lengthSq() > 0) {
+      const cameraWorldQuaternion = camera.getWorldQuaternion(
+        new THREE.Quaternion(),
+      );
+      const cameraRight = new THREE.Vector3(1, 0, 0)
+        .applyQuaternion(cameraWorldQuaternion)
+        .normalize();
+      const cameraUp = new THREE.Vector3(0, 1, 0)
+        .applyQuaternion(cameraWorldQuaternion)
+        .normalize();
+      const rayDirection = pointerRayDirection?.clone().normalize();
+      const candidates = [
+        new THREE.Vector3().crossVectors(axisDirection, cameraRight),
+        new THREE.Vector3().crossVectors(axisDirection, cameraUp),
+      ];
+
+      let bestNormal = null;
+      let bestScore = -1;
+
+      candidates.forEach((candidate) => {
+        if (candidate.lengthSq() < 1e-6) {
+          return;
+        }
+
+        candidate.normalize();
+
+        const score = rayDirection
+          ? Math.abs(candidate.dot(rayDirection))
+          : 0;
+
+        if (score > bestScore) {
+          bestNormal = candidate;
+          bestScore = score;
+        }
+      });
+
+      if (!bestNormal || bestScore < 1e-6) {
+        // Exact axis-parallel pointer rays have no unique axis drag plane.
+        // Keep the plane valid with a deterministic axis-perpendicular normal.
+        const fallback =
+          Math.abs(axisDirection.y) < 0.9
+            ? new THREE.Vector3(0, 1, 0)
+            : new THREE.Vector3(1, 0, 0);
+
+        bestNormal = new THREE.Vector3()
+          .crossVectors(axisDirection, fallback)
+          .normalize();
+      }
+
+      normal.copy(bestNormal);
+    }
+
+    this.plane.setFromNormalAndCoplanarPoint(normal, origin);
+
+    return this.plane;
+  }
+
+  get() {
+    return this.plane;
+  }
+}
+
+export default new GizmoDragPlane();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoHoverController.js
+==============================
+
+class GizmoHoverController {
+  constructor() {
+    this.axis = null;
+  }
+
+  enter(axis) {
+    this.axis = axis;
+  }
+
+  leave() {
+    this.axis = null;
+  }
+
+  getAxis() {
+    return this.axis;
+  }
+
+  clear() {
+    this.axis = null;
+  }
+}
+
+export default new GizmoHoverController();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoInteraction.jsx
+==============================
+
+import { useFrame, useThree } from "@react-three/fiber";
+
+import GizmoState from "../GizmoState";
+
+import GizmoRaycaster from "./GizmoRaycaster";
+import GizmoDragPlane from "./GizmoDragPlane";
+import GizmoDragController from "./GizmoDragController";
+import GizmoMoveController from "./GizmoMoveController";
+
+export default function GizmoInteraction() {
+  const { camera, pointer } = useThree();
+
+  useFrame(() => {
+    // ------------------------------------------------------------
+    // Not dragging
+    // ------------------------------------------------------------
+
+    if (!GizmoDragController.isDragging()) {
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // Get drag plane
+    // ------------------------------------------------------------
+
+    const plane = GizmoDragPlane.get();
+
+    if (!plane) {
+      console.warn("GIZMO INTERACTION: No drag plane");
+
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // Ray -> Plane intersection
+    // ------------------------------------------------------------
+
+    const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
+
+    if (!point) {
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // Calculate drag delta
+    // ------------------------------------------------------------
+
+    const delta = GizmoDragController.update(point);
+
+    if (!delta) {
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // MOVE
+    // ------------------------------------------------------------
+
+    console.log("========== MOVE ==========");
+    console.log("Entity:", GizmoState.entity);
+    console.log("Axis:", GizmoState.axis);
+    console.log("Delta:", delta);
+
+    GizmoMoveController.move(GizmoState.entity, GizmoState.axis, delta);
+  });
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoMoveController.js
+==============================
+
+import * as THREE from "three";
+
+import EditorTransform from "../../transform/EditorTransform";
+
+class GizmoMoveController {
+  constructor() {
+    this.startPosition = new THREE.Vector3();
+
+    this.lastDelta = new THREE.Vector3();
+
+    this.initialized = false;
+  }
+
+  // ============================================================
+  // RESET
+  // ============================================================
+
+  reset() {
+    console.log("[GizmoMoveController] RESET");
+
+    this.startPosition.set(0, 0, 0);
+
+    this.lastDelta.set(0, 0, 0);
+
+    this.initialized = false;
+  }
+
+  // ============================================================
+  // MOVE
+  // ============================================================
+
+  move(entity, axis, delta) {
+    if (!entity) {
+      console.warn("[GizmoMoveController] Missing entity");
+      return;
+    }
+
+    if (!entity.transform) {
+      console.warn("[GizmoMoveController] Entity has no transform", entity);
+      return;
+    }
+
+    if (!delta) {
+      console.warn("[GizmoMoveController] Missing delta");
+      return;
+    }
+
+    if (!this.initialized) {
+      this.startPosition.copy(entity.transform.position);
+
+      this.initialized = true;
+
+      console.log(
+        "[GizmoMoveController] Drag start position:",
+        this.startPosition.clone(),
+      );
+    }
+
+    const movement = this.getAxisMovement(axis, delta);
+
+    if (!movement) {
+      console.warn("[GizmoMoveController] Invalid axis:", axis);
+
+      return;
+    }
+
+    const nextPosition = this.startPosition.clone().add(movement);
+
+    console.log("[GizmoMoveController] MOVE", {
+      entity: entity.name,
+      axis,
+      delta: delta.clone(),
+      movement: movement.clone(),
+      start: this.startPosition.clone(),
+      next: nextPosition.clone(),
+    });
+
+    EditorTransform.setEntityPosition(
+      entity,
+      nextPosition.x,
+      nextPosition.y,
+      nextPosition.z,
+    );
+
+    this.lastDelta.copy(movement);
+  }
+
+  // ============================================================
+  // AXIS MOVEMENT
+  // ============================================================
+
+  getAxisMovement(axis, delta) {
+    switch (axis) {
+      case "x":
+        return new THREE.Vector3(delta.x, 0, 0);
+
+      case "y":
+        return new THREE.Vector3(0, delta.y, 0);
+
+      case "z":
+        return new THREE.Vector3(0, 0, delta.z);
+
+      case "xy":
+        return new THREE.Vector3(delta.x, delta.y, 0);
+
+      case "xz":
+        return new THREE.Vector3(delta.x, 0, delta.z);
+
+      case "yz":
+        return new THREE.Vector3(0, delta.y, delta.z);
+
+      default:
+        return null;
+    }
+  }
+
+  // ============================================================
+  // GET DELTA
+  // ============================================================
+
+  getDelta() {
+    return this.lastDelta.clone();
+  }
+}
+
+export default new GizmoMoveController();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoRaycaster.js
+==============================
+
+import * as THREE from "three";
+
+class GizmoRaycaster {
+  constructor() {
+    this.raycaster = new THREE.Raycaster();
+    this.ndc = new THREE.Vector2();
+    this.intersection = new THREE.Vector3();
+  }
+
+  intersectPlane(camera, pointer, plane) {
+    if (!camera || !pointer || !plane) {
+      return null;
+    }
+
+    this.ndc.set(pointer.x, pointer.y);
+
+    this.raycaster.setFromCamera(this.ndc, camera);
+
+    const hit = this.raycaster.ray.intersectPlane(plane, this.intersection);
+
+    if (!hit) {
+      return null;
+    }
+
+    return this.intersection.clone();
+  }
+}
+
+export default new GizmoRaycaster();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoRotateController.js
+==============================
+
+import * as THREE from "three";
+
+class GizmoRotateController {
+  constructor() {
+    this.startRotation = new THREE.Euler();
+
+    this.lastRotation = new THREE.Euler();
+
+    this.initialized = false;
+  }
+
+  reset() {
+    this.startRotation.set(0, 0, 0);
+
+    this.lastRotation.set(0, 0, 0);
+
+    this.initialized = false;
+  }
+
+  rotate(entity, axis, angle) {
+    if (!entity) return;
+
+    if (!Number.isFinite(angle)) return;
+
+    if (!this.initialized) {
+      this.startRotation.copy(entity.transform.rotation);
+
+      this.initialized = true;
+    }
+
+    const rotation = this.startRotation.clone();
+
+    switch (axis) {
+      case "x":
+        rotation.x += angle;
+        break;
+
+      case "y":
+        rotation.y += angle;
+        break;
+
+      case "z":
+        rotation.z += angle;
+        break;
+
+      default:
+        return;
+    }
+
+    entity.transform.setRotation(rotation.x, rotation.y, rotation.z);
+
+    this.lastRotation.copy(rotation);
+  }
+
+  getRotation() {
+    return this.lastRotation.clone();
+  }
+}
+
+export default new GizmoRotateController();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Move\MoveArrow.jsx
+==============================
+
+import { Cone } from "@react-three/drei";
+
+import GizmoMaterial from "../shared/GizmoMaterial";
+
+export default function MoveArrow({
+  color,
+
+  position,
+
+  rotation,
+
+  axis,
+
+  onPointerDown,
+
+  onPointerOver,
+
+  onPointerOut,
+}) {
+  const handlePointerDown = (event) => {
+    onPointerDown?.(event, axis);
+  };
+
+  const handlePointerOver = (event) => {
+    onPointerOver?.(event, axis);
+  };
+
+  const handlePointerOut = (event) => {
+    onPointerOut?.(event, axis);
+  };
+
+  return (
+    <Cone
+      args={[0.08, 0.18, 16]}
+      position={position}
+      rotation={rotation}
+      onPointerDown={handlePointerDown}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+    >
+      <primitive object={GizmoMaterial.get(color)} attach="material" />
+    </Cone>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Move\MoveAxis.jsx
+==============================
+
+import { Cylinder } from "@react-three/drei";
+import * as THREE from "three";
+
+import MoveArrow from "./MoveArrow";
+import GizmoMaterial from "../shared/GizmoMaterial";
+
+export default function MoveAxis({
+  axis,
+
+  color,
+
+  rotation,
+
+  arrowPosition,
+
+  onPointerDown,
+
+  onPointerOver,
+
+  onPointerOut,
+}) {
+  const handlePointerDown = (event) => {
+    onPointerDown?.(event, axis);
+  };
+
+  const handlePointerOver = (event) => {
+    onPointerOver?.(event, axis);
+  };
+
+  const handlePointerOut = (event) => {
+    onPointerOut?.(event, axis);
+  };
+
+  return (
+    <group rotation={rotation}>
+      <mesh
+        name={`MoveAxisHit:${axis}`}
+        position={[0, 0.525, 0]}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <cylinderGeometry args={[0.1, 0.1, 1.05, 8]} />
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      <Cylinder
+        args={[0.02, 0.02, 0.8, 8]}
+        position={[0, 0.4, 0]}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <primitive object={GizmoMaterial.get(color)} attach="material" />
+      </Cylinder>
+
+      <MoveArrow
+        color={color}
+        position={arrowPosition}
+        axis={axis}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      />
+    </group>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Move\MoveGizmo.jsx
+==============================
+
+import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
+
+import MoveAxis from "./MoveAxis";
+import MovePlane from "./MovePlane";
+
+import { GIZMO_COLORS, GIZMO_AXIS } from "../shared/GizmoConstants";
+
+const planeInnerOffset = 0.08;
+const visualPlaneSize = 0.32;
+const hitPlaneSize = 0.42;
+
+const visualPlaneCenter = planeInnerOffset + visualPlaneSize / 2;
+
+const hitPlaneCenter = planeInnerOffset + hitPlaneSize / 2;
+
+export default function MoveGizmo({
+  entity,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+}) {
+  const group = useRef();
+
+  useFrame(() => {
+    if (!group.current || !entity?.transform) {
+      return;
+    }
+
+    group.current.position.copy(entity.transform.position);
+  });
+
+  return (
+    <group ref={group} name="MoveGizmo" scale={[2.5, 2.5, 2.5]}>
+      {/* X AXIS */}
+
+      <MoveAxis
+        axis={GIZMO_AXIS.X}
+        color={GIZMO_COLORS.X}
+        rotation={[0, 0, -Math.PI / 2]}
+        arrowPosition={[0, 0.9, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      {/* Y AXIS */}
+
+      <MoveAxis
+        axis={GIZMO_AXIS.Y}
+        color={GIZMO_COLORS.Y}
+        rotation={[0, 0, 0]}
+        arrowPosition={[0, 0.9, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      {/* Z AXIS */}
+
+      <MoveAxis
+        axis={GIZMO_AXIS.Z}
+        color={GIZMO_COLORS.Z}
+        rotation={[Math.PI / 2, 0, 0]}
+        arrowPosition={[0, 0.9, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      {/* XY PLANE */}
+
+      <MovePlane
+        axis={GIZMO_AXIS.XY}
+        color={GIZMO_COLORS.X}
+        visualSize={visualPlaneSize}
+        hitSize={hitPlaneSize}
+        visualPosition={[visualPlaneCenter, visualPlaneCenter, 0]}
+        hitPosition={[hitPlaneCenter, hitPlaneCenter, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      {/* XZ PLANE */}
+
+      <MovePlane
+        axis={GIZMO_AXIS.XZ}
+        color={GIZMO_COLORS.Y}
+        rotation={[Math.PI / 2, 0, 0]}
+        visualSize={visualPlaneSize}
+        hitSize={hitPlaneSize}
+        visualPosition={[visualPlaneCenter, 0, visualPlaneCenter]}
+        hitPosition={[hitPlaneCenter, 0, hitPlaneCenter]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      {/* YZ PLANE */}
+
+      <MovePlane
+        axis={GIZMO_AXIS.YZ}
+        color={GIZMO_COLORS.Z}
+        rotation={[0, Math.PI / 2, 0]}
+        visualSize={visualPlaneSize}
+        hitSize={hitPlaneSize}
+        visualPosition={[0, visualPlaneCenter, visualPlaneCenter]}
+        hitPosition={[0, hitPlaneCenter, hitPlaneCenter]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+    </group>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Move\MoveHandle.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Move\MovePlane.jsx
+==============================
+
+import * as THREE from "three";
+
+import GizmoMaterial from "../shared/GizmoMaterial";
+
+export default function MovePlane({
+  axis,
+  color,
+  visualSize,
+  hitSize,
+  visualPosition,
+  hitPosition,
+  rotation,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+}) {
+  const handlePointerDown = (event) => {
+    onPointerDown?.(event, axis);
+  };
+
+  const handlePointerOver = (event) => {
+    onPointerOver?.(event, axis);
+  };
+
+  const handlePointerOut = (event) => {
+    onPointerOut?.(event, axis);
+  };
+
+  return (
+    <>
+      <mesh position={visualPosition} rotation={rotation}>
+        <planeGeometry args={[visualSize, visualSize]} />
+        <primitive
+          object={GizmoMaterial.getTransparent(color)}
+          attach="material"
+        />
+      </mesh>
+
+      <mesh
+        name={`MovePlaneHit:${axis}`}
+        position={hitPosition}
+        rotation={rotation}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <planeGeometry args={[hitSize, hitSize]} />
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Rotate\RotateGizmo.jsx
+==============================
+
+import { useMemo } from "react";
+
+import RotateRing from "./RotateRing";
+
+import { GIZMO_AXIS, GIZMO_COLORS } from "../shared/GizmoConstants";
+
+export default function RotateGizmo({
+  entity,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+}) {
+  const position = useMemo(() => {
+    if (!entity?.getObject) {
+      return [0, 0, 0];
+    }
+
+    return entity.getObject().position.toArray();
+  }, [entity]);
+
+  return (
+    <group position={position}>
+      <RotateRing
+        axis={GIZMO_AXIS.X}
+        color={GIZMO_COLORS.X}
+        rotation={[0, Math.PI / 2, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      <RotateRing
+        axis={GIZMO_AXIS.Y}
+        color={GIZMO_COLORS.Y}
+        rotation={[Math.PI / 2, 0, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      <RotateRing
+        axis={GIZMO_AXIS.Z}
+        color={GIZMO_COLORS.Z}
+        rotation={[0, 0, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+    </group>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Rotate\RotateHandle.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Rotate\RotateRing.jsx
+==============================
+
+import { Torus } from "@react-three/drei";
+
+import GizmoMaterial from "../shared/GizmoMaterial";
+
+export default function RotateRing({
+  axis,
+  color,
+  rotation,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+}) {
+  const handlePointerDown = (event) => {
+    onPointerDown?.(event, axis);
+  };
+
+  const handlePointerOver = (event) => {
+    onPointerOver?.(event, axis);
+  };
+
+  const handlePointerOut = (event) => {
+    onPointerOut?.(event, axis);
+  };
+
+  return (
+    <Torus
+      args={[1.2, 0.015, 12, 64]}
+      rotation={rotation}
+      onPointerDown={handlePointerDown}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+    >
+      <primitive object={GizmoMaterial.get(color)} attach="material" />
+    </Torus>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Scale\ScaleAxis.jsx
+==============================
+
+import { Cylinder, Box } from "@react-three/drei";
+
+import GizmoMaterial from "../shared/GizmoMaterial";
+
+export default function ScaleAxis({
+  axis,
+  color,
+  rotation,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+}) {
+  const handlePointerDown = (event) => {
+    onPointerDown?.(event, axis);
+  };
+
+  const handlePointerOver = (event) => {
+    onPointerOver?.(event, axis);
+  };
+
+  const handlePointerOut = (event) => {
+    onPointerOut?.(event, axis);
+  };
+
+  return (
+    <group rotation={rotation}>
+      <Cylinder
+        args={[0.015, 0.015, 0.9]}
+        position={[0, 0.45, 0]}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <primitive object={GizmoMaterial.get(color)} attach="material" />
+      </Cylinder>
+
+      <Box
+        args={[0.08, 0.08, 0.08]}
+        position={[0, 0.95, 0]}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <primitive object={GizmoMaterial.get(color)} attach="material" />
+      </Box>
+    </group>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Scale\ScaleCube.jsx
+==============================
+
+import { Box } from "@react-three/drei";
+
+import GizmoMaterial from "../shared/GizmoMaterial";
+
+export default function ScaleCube({
+  axis,
+  color,
+  position,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+}) {
+  const handlePointerDown = (event) => {
+    onPointerDown?.(event, axis);
+  };
+
+  const handlePointerOver = (event) => {
+    onPointerOver?.(event, axis);
+  };
+
+  const handlePointerOut = (event) => {
+    onPointerOut?.(event, axis);
+  };
+
+  return (
+    <Box
+      args={[0.15, 0.15, 0.15]}
+      position={position}
+      onPointerDown={handlePointerDown}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+    >
+      <primitive object={GizmoMaterial.get(color)} attach="material" />
+    </Box>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Scale\ScaleGizmo.jsx
+==============================
+
+import { useMemo } from "react";
+
+import ScaleAxis from "./ScaleAxis";
+
+import { GIZMO_AXIS, GIZMO_COLORS } from "../shared/GizmoConstants";
+import ScaleCube from "./ScaleCube";
+
+export default function ScaleGizmo({
+  entity,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+}) {
+  const position = useMemo(() => {
+    if (!entity?.getObject) {
+      return [0, 0, 0];
+    }
+
+    return entity.getObject().position.toArray();
+  }, [entity]);
+
+  return (
+    <group position={position}>
+      <ScaleAxis
+        axis={GIZMO_AXIS.X}
+        color={GIZMO_COLORS.X}
+        rotation={[0, 0, -Math.PI / 2]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      <ScaleAxis
+        axis={GIZMO_AXIS.Y}
+        color={GIZMO_COLORS.Y}
+        rotation={[0, 0, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      <ScaleAxis
+        axis={GIZMO_AXIS.Z}
+        color={GIZMO_COLORS.Z}
+        rotation={[Math.PI / 2, 0, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+
+      <ScaleCube
+        axis={GIZMO_AXIS.XYZ}
+        color={GIZMO_COLORS.CENTER}
+        position={[0, 0, 0]}
+        onPointerDown={onPointerDown}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      />
+    </group>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Scale\ScaleHandle.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\shared\GizmoConstants.js
+==============================
+
+export const GIZMO_MODES = {
+  MOVE: "move",
+  ROTATE: "rotate",
+  SCALE: "scale",
+};
+
+export const GIZMO_AXIS = {
+  X: "x",
+  Y: "y",
+  Z: "z",
+  XY: "xy",
+  XZ: "xz",
+  YZ: "yz",
+  XYZ: "xyz",
+};
+
+export const GIZMO_SPACE = {
+  WORLD: "world",
+  LOCAL: "local",
+};
+
+export const GIZMO_COLORS = {
+  X: "#ff4d4d",
+  Y: "#55ff55",
+  Z: "#5599ff",
+  CENTER: "#ffffff",
+  HOVER: "#ffff00",
+};
+
+export const GIZMO_SIZE = 1;
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\shared\GizmoMaterial.js
+==============================
+
+import * as THREE from "three";
+
+class GizmoMaterial {
+  constructor() {
+    this.cache = {};
+  }
+
+  get(color) {
+    if (this.cache[color]) {
+      return this.cache[color];
+    }
+
+    this.cache[color] = new THREE.MeshBasicMaterial({
+      color,
+
+      depthTest: false,
+
+      depthWrite: false,
+
+      toneMapped: false,
+    });
+
+    return this.cache[color];
+  }
+
+  getTransparent(color) {
+    const key = `${color}-transparent`;
+
+    if (this.cache[key]) {
+      return this.cache[key];
+    }
+
+    this.cache[key] = new THREE.MeshBasicMaterial({
+      color,
+
+      transparent: true,
+
+      opacity: 0.25,
+
+      side: THREE.DoubleSide,
+
+      depthTest: false,
+
+      depthWrite: false,
+
+      toneMapped: false,
+    });
+
+    return this.cache[key];
+  }
+
+  dispose() {
+    Object.values(this.cache).forEach((material) => material.dispose());
+
+    this.cache = {};
+  }
+}
+
+export default new GizmoMaterial();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\shared\GizmoUtils.js
+==============================
+
+export function stopEvent(e) {
+  e.stopPropagation();
+
+  e.preventDefault();
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\hierarchy\Hierarchy.jsx
+==============================
+
+import { useEffect, useState } from "react";
+
+import { EventBus, EngineEvents } from "../../events";
+
+import { EntityManager } from "../../entity";
+
+import HierarchyItem from "./HierarchyItem";
+
+export default function Hierarchy() {
+  const [entities, setEntities] = useState(EntityManager.getAll());
+
+  useEffect(() => {
+    function refresh() {
+      setEntities([...EntityManager.getAll()]);
+    }
+
+    EventBus.on(
+      EngineEvents.ENTITY_CREATED,
+
+      refresh,
+    );
+
+    EventBus.on(
+      EngineEvents.ENTITY_DESTROYED,
+
+      refresh,
+    );
+
+    return () => {
+      EventBus.off(
+        EngineEvents.ENTITY_CREATED,
+
+        refresh,
+      );
+
+      EventBus.off(
+        EngineEvents.ENTITY_DESTROYED,
+
+        refresh,
+      );
+    };
+  }, []);
+
+  return (
+    <>
+      {entities.map((entity) => (
+        <HierarchyItem key={entity.uuid} entity={entity} />
+      ))}
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\hierarchy\HierarchyItem.jsx
+==============================
+
+import EditorSelection from "../selection/EditorSelection";
+
+export default function HierarchyItem({ entity }) {
+  return (
+    <div onClick={() => EditorSelection.selectEntity(entity)}>
+      {entity.name}
+    </div>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\hierarchy\index.js
+==============================
+
+export { default as Hierarchy } from "./Hierarchy";
+export { default as HierarchyItem } from "./HierarchyItem";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\inspector\index.js
+==============================
+
+export { default as Inspector } from "./Inspector";
+export { default as InspectorTransform } from "./InspectorTransform";
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\inspector\Inspector.jsx
+==============================
+
+import useEngineStore from "../../../store/engineStore";
+
+import InspectorTransform from "./InspectorTransform";
+
+export default function Inspector() {
+  const entity = useEngineStore((state) => state.editor.selectedEntity);
+
+  if (!entity) {
+    return (
+      <div
+        style={{
+          color: "#999",
+          fontSize: 13,
+        }}
+      >
+        No Entity Selected
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* ============================================================
+          ENTITY
+      ============================================================ */}
+
+      <div
+        style={{
+          marginBottom: 12,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 16,
+            fontWeight: 600,
+            marginBottom: 8,
+          }}
+        >
+          {entity.name}
+        </div>
+
+        <div
+          style={{
+            fontSize: 12,
+            color: "#999",
+          }}
+        >
+          Type: {entity.type}
+        </div>
+
+        <div
+          style={{
+            fontSize: 11,
+            color: "#777",
+            marginTop: 3,
+            wordBreak: "break-all",
+          }}
+        >
+          UUID: {entity.uuid}
+        </div>
+      </div>
+
+      {/* ============================================================
+          TRANSFORM
+      ============================================================ */}
+
+      <InspectorTransform entity={entity} />
+    </div>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\inspector\InspectorTransform.jsx
+==============================
+
+import { useEffect, useState } from "react";
+
+import { EventBus, EngineEvents } from "../../events";
+
+import EditorTransform from "../transform/EditorTransform";
+
+function VectorRow({ label, value, onChange }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "30px 1fr 1fr 1fr",
+        gap: 4,
+        marginBottom: 6,
+        alignItems: "center",
+      }}
+    >
+      <span
+        style={{
+          fontSize: 12,
+          color: "#aaa",
+        }}
+      >
+        {label}
+      </span>
+
+      <input
+        type="number"
+        value={value.x}
+        onChange={(event) => onChange("x", Number(event.target.value))}
+        style={inputStyle}
+      />
+
+      <input
+        type="number"
+        value={value.y}
+        onChange={(event) => onChange("y", Number(event.target.value))}
+        style={inputStyle}
+      />
+
+      <input
+        type="number"
+        value={value.z}
+        onChange={(event) => onChange("z", Number(event.target.value))}
+        style={inputStyle}
+      />
+    </div>
+  );
+}
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+
+  background: "#151515",
+  color: "#fff",
+
+  border: "1px solid #3d3d3d",
+  borderRadius: 3,
+
+  padding: "4px 5px",
+
+  fontSize: 11,
+
+  outline: "none",
+};
+
+export default function InspectorTransform({ entity }) {
+  const [, forceUpdate] = useState(0);
+
+  useEffect(() => {
+    function onTransformChanged(changedEntity) {
+      if (!changedEntity) {
+        forceUpdate((value) => value + 1);
+        return;
+      }
+
+      if (changedEntity === entity) {
+        forceUpdate((value) => value + 1);
+      }
+    }
+
+    EventBus.on(EngineEvents.TRANSFORM_CHANGED, onTransformChanged);
+
+    return () => {
+      EventBus.off(EngineEvents.TRANSFORM_CHANGED, onTransformChanged);
+    };
+  }, [entity]);
+
+  if (!entity?.transform) {
+    return null;
+  }
+
+  const transform = entity.transform;
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        paddingTop: 12,
+        borderTop: "1px solid #444",
+      }}
+    >
+      <h4
+        style={{
+          margin: "0 0 10px",
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        Transform
+      </h4>
+
+      {/* POSITION */}
+
+      <VectorRow
+        label="P"
+        value={transform.position}
+        onChange={(axis, value) => {
+          const position = transform.position.clone();
+
+          position[axis] = value;
+
+          EditorTransform.setEntityPosition(
+            entity,
+            position.x,
+            position.y,
+            position.z,
+          );
+        }}
+      />
+
+      {/* ROTATION */}
+
+      <VectorRow
+        label="R"
+        value={{
+          x: transform.rotation.x,
+          y: transform.rotation.y,
+          z: transform.rotation.z,
+        }}
+        onChange={(axis, value) => {
+          const rotation = transform.rotation.clone();
+
+          rotation[axis] = value;
+
+          EditorTransform.setEntityRotation(
+            entity,
+            rotation.x,
+            rotation.y,
+            rotation.z,
+          );
+        }}
+      />
+
+      {/* SCALE */}
+
+      <VectorRow
+        label="S"
+        value={transform.scale}
+        onChange={(axis, value) => {
+          const scale = transform.scale.clone();
+
+          scale[axis] = value;
+
+          EditorTransform.setEntityScale(entity, scale.x, scale.y, scale.z);
+        }}
+      />
+    </div>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\selection\EditorEntity.jsx
+==============================
+
+import { useEffect, useRef } from "react";
+
+import Entity from "../../entity/Entity";
+import World from "../../world/World";
+
+export default function EditorEntity({
+  name,
+  type = "Mesh",
+  children,
+  position = [0, 0, 0],
+}) {
+  const groupRef = useRef(null);
+
+  useEffect(() => {
+    const object = groupRef.current;
+
+    if (!object) {
+      return;
+    }
+
+    const entity = new Entity(name, type);
+
+    entity.setObject(object);
+
+    // ------------------------------------------------------------
+    // Three.js metadata
+    // ------------------------------------------------------------
+
+    object.name = name;
+
+    object.userData.entity = entity;
+    object.userData.entityId = entity.id;
+    object.userData.entityUUID = entity.uuid;
+    object.userData.ignoreRaycast = false;
+
+    // ------------------------------------------------------------
+    // Initial Entity transform
+    //
+    // The React object already owns the actual scene hierarchy.
+    // We only copy its local position into the Entity state.
+    // ------------------------------------------------------------
+
+    entity.transform.setPosition(
+      position[0] ?? 0,
+      position[1] ?? 0,
+      position[2] ?? 0,
+    );
+
+    // ------------------------------------------------------------
+    // Register entity.
+    //
+    // IMPORTANT:
+    // World.spawn() must NOT re-parent the object.
+    // ------------------------------------------------------------
+
+    World.spawn(entity);
+
+    return () => {
+      if (World.running) {
+        World.despawn(entity);
+      }
+    };
+  }, [name, type, position]);
+
+  return (
+    <group ref={groupRef} name={name} position={position}>
+      {children}
+    </group>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\selection\EditorOutline.jsx
+==============================
+
+import { useEffect, useState } from "react";
+
+import { EventBus, EngineEvents } from "../../events";
+
+export default function EditorOutline() {
+  const [entity, setEntity] = useState(null);
+
+  useEffect(() => {
+    EventBus.on(
+      EngineEvents.ENTITY_SELECTED,
+
+      setEntity,
+    );
+
+    EventBus.on(
+      EngineEvents.ENTITY_DESELECTED,
+
+      () => setEntity(null),
+    );
+
+    return () => {
+      EventBus.off(
+        EngineEvents.ENTITY_SELECTED,
+
+        setEntity,
+      );
+    };
+  }, []);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\selection\EditorRaycaster.js
+==============================
+
+import { useEffect, useRef } from "react";
+import { useThree } from "@react-three/fiber";
+import * as THREE from "three";
+
+import EditorSelection from "./EditorSelection";
+import GizmoDragController from "../gizmos/interaction/GizmoDragController";
+
+import EntityManager from "../../entity/EntityManager";
+
+export default function EditorRaycaster() {
+  const { camera, scene } = useThree();
+
+  const raycaster = useRef(new THREE.Raycaster());
+  const pointer = useRef(new THREE.Vector2());
+
+  useEffect(() => {
+    function onPointerDown(event) {
+      // ============================================================
+      // LEFT MOUSE BUTTON ONLY
+      // ============================================================
+
+      if (event.button !== 0) {
+        return;
+      }
+
+      // ============================================================
+      // IGNORE NOVA EDITOR UI
+      // ============================================================
+
+      const target = event.target;
+
+      if (
+        target instanceof Element &&
+        target.closest("[data-nova-editor='true']")
+      ) {
+        return;
+      }
+
+      // ============================================================
+      // IGNORE GIZMO DRAG
+      // ============================================================
+
+      if (GizmoDragController.isDragging()) {
+        return;
+      }
+
+      // ============================================================
+      // POINTER -> NDC
+      // ============================================================
+
+      const rect = event.target?.getBoundingClientRect?.();
+
+      if (rect) {
+        pointer.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+
+        pointer.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      } else {
+        pointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
+
+        pointer.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      }
+
+      // ============================================================
+      // UPDATE RAY
+      // ============================================================
+
+      raycaster.current.setFromCamera(pointer.current, camera);
+
+      // ============================================================
+      // COLLECT RAYCASTABLE MESHES
+      // ============================================================
+
+      const meshes = [];
+
+      scene.traverse((object) => {
+        if (!object.isMesh) {
+          return;
+        }
+
+        if (object.userData.ignoreRaycast) {
+          return;
+        }
+
+        meshes.push(object);
+      });
+
+      // ============================================================
+      // RAYCAST
+      // ============================================================
+
+      const intersects = raycaster.current.intersectObjects(meshes, false);
+
+      // ============================================================
+      // FILTER INVALID HITS
+      // ============================================================
+
+      const hits = intersects.filter((hit) => {
+        const object = hit.object;
+
+        if (!object) {
+          return false;
+        }
+
+        if (object.userData.ignoreRaycast) {
+          return false;
+        }
+
+        if (object.type === "Sky" || object.type === "Sky2") {
+          return false;
+        }
+
+        return true;
+      });
+
+      // ============================================================
+      // DEBUG
+      // ============================================================
+
+      console.group("========== RAYCAST ==========");
+
+      console.log("Hits:", hits.length);
+
+      // ============================================================
+      // NOTHING HIT
+      // ============================================================
+
+      if (!hits.length) {
+        console.log("Nothing hit");
+
+        console.groupEnd();
+
+        EditorSelection.clearSelection();
+
+        return;
+      }
+
+      // ============================================================
+      // LOG ALL HITS
+      // ============================================================
+
+      hits.forEach((hit, index) => {
+        console.log("-------------------------");
+
+        console.log("HIT", index);
+
+        console.log("Mesh UUID :", hit.object.uuid);
+
+        console.log("Mesh Name :", hit.object.name);
+
+        console.log("Mesh Type :", hit.object.type);
+
+        console.log("Distance  :", hit.distance);
+
+        console.log("UserData  :", hit.object.userData);
+      });
+
+      // ============================================================
+      // FIND ENTITY FROM HIT
+      // ============================================================
+
+      let selectedEntity = null;
+      let selectedObject = null;
+
+      /*
+       * IMPORTANT:
+       *
+       * We check EVERY hit, not only hits[0].
+       *
+       * This matters because a visual mesh may be sitting above
+       * another selectable entity.
+       *
+       * The first hit that actually belongs to a Nova Entity
+       * becomes the selection.
+       */
+
+      for (const hit of hits) {
+        let object = hit.object;
+
+        // ----------------------------------------------------------
+        // Walk up the Three.js hierarchy
+        // ----------------------------------------------------------
+
+        while (object) {
+          // --------------------------------------------------------
+          // Direct Entity reference
+          // --------------------------------------------------------
+
+          if (object.userData?.entity) {
+            selectedEntity = object.userData.entity;
+            selectedObject = object;
+
+            break;
+          }
+
+          // --------------------------------------------------------
+          // Entity UUID reference
+          // --------------------------------------------------------
+
+          if (object.userData?.entityUUID) {
+            const entity = EntityManager.getByUUID(object.userData.entityUUID);
+
+            if (entity) {
+              selectedEntity = entity;
+              selectedObject = object;
+
+              break;
+            }
+          }
+
+          object = object.parent;
+        }
+
+        if (selectedEntity) {
+          break;
+        }
+      }
+
+      // ============================================================
+      // NO ENTITY FOUND
+      // ============================================================
+
+      if (!selectedEntity) {
+        console.warn(
+          "Raycast hit a render object, but that object is not attached to a Nova Entity.",
+        );
+
+        console.warn(
+          "Selection requires userData.entity or userData.entityUUID.",
+        );
+
+        console.groupEnd();
+
+        EditorSelection.clearSelection();
+
+        return;
+      }
+
+      // ============================================================
+      // ENTITY FOUND
+      // ============================================================
+
+      console.log("");
+
+      console.log("FOUND ENTITY");
+
+      console.table({
+        id: selectedEntity.id,
+        uuid: selectedEntity.uuid,
+        name: selectedEntity.name,
+        type: selectedEntity.type,
+      });
+
+      console.log("Selected Render Object:", selectedObject);
+
+      console.groupEnd();
+
+      // ============================================================
+      // SELECT ENTITY
+      // ============================================================
+
+      EditorSelection.selectEntity(selectedEntity);
+    }
+
+    // ================================================================
+    // WINDOW POINTER LISTENER
+    // ================================================================
+
+    window.addEventListener("pointerdown", onPointerDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [camera, scene]);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\selection\EditorSelection.js
+==============================
+
+import useEngineStore from "../../../store/engineStore";
+
+import { EventBus, EngineEvents } from "../../events";
+
+function selectEntity(entity) {
+  const selected = useEngineStore.getState().editor.selectedEntity;
+
+  if (selected === entity) return;
+
+  useEngineStore.getState().setSelectedEntity(entity);
+
+  EventBus.emit(EngineEvents.ENTITY_SELECTED, entity);
+}
+
+function clearSelection() {
+  useEngineStore.getState().clearSelection();
+
+  EventBus.emit(EngineEvents.ENTITY_DESELECTED);
+}
+
+function toggleSelection(entity) {
+  if (isSelected(entity)) {
+    clearSelection();
+
+    return;
+  }
+
+  selectEntity(entity);
+}
+
+function getSelectedEntity() {
+  return useEngineStore.getState().editor.selectedEntity;
+}
+
+function isSelected(entity) {
+  return getSelectedEntity() === entity;
+}
+
+export default {
+  selectEntity,
+
+  clearSelection,
+
+  toggleSelection,
+
+  getSelectedEntity,
+
+  isSelected,
+};
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\selection\index.js
+==============================
+
+export { default as EditorOutline } from "./EditorOutline";
+export { default as EditorRaycaster } from "./EditorRaycaster";
+export { default as EditorSelection } from "./EditorSelection";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\shortcuts\EditorShortcuts.js
+==============================
+
+export default function EditorShortcuts() {
+
+    return null;
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\shortcuts\index.js
+==============================
+
+export { default as EditorShortcuts } from "./EditorShortcuts";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\transform\EditorTransform.js
+==============================
+
+import { EventBus, EngineEvents } from "../../events";
+
+class EditorTransform {
+  constructor() {
+    this.entity = null;
+
+    EventBus.on(EngineEvents.ENTITY_SELECTED, (entity) => {
+      this.entity = entity;
+    });
+
+    EventBus.on(EngineEvents.ENTITY_DESELECTED, () => {
+      this.entity = null;
+    });
+  }
+
+  // ============================================================
+  // SELECTION
+  // ============================================================
+
+  getSelectedEntity() {
+    return this.entity;
+  }
+
+  // ============================================================
+  // POSITION
+  // ============================================================
+
+  translate(delta) {
+    if (!this.entity || !delta) return;
+
+    this.entity.transform.translate(delta.x, delta.y, delta.z);
+  }
+
+  translateAxis(axis, amount) {
+    if (!this.entity) return;
+
+    const position = this.entity.transform.position.clone();
+
+    switch (axis) {
+      case "x":
+        position.x += amount;
+        break;
+
+      case "y":
+        position.y += amount;
+        break;
+
+      case "z":
+        position.z += amount;
+        break;
+
+      default:
+        return;
+    }
+
+    this.entity.transform.setPosition(position.x, position.y, position.z);
+  }
+
+  setPosition(x, y, z) {
+    if (!this.entity) return;
+
+    this.entity.transform.setPosition(x, y, z);
+  }
+
+  // ============================================================
+  // ENTITY POSITION
+  // ============================================================
+
+  setEntityPosition(entity, x, y, z) {
+    if (!entity) {
+      console.warn("[EditorTransform] setEntityPosition: missing entity");
+
+      return;
+    }
+
+    if (!entity.transform) {
+      console.warn(
+        "[EditorTransform] setEntityPosition: missing transform",
+        entity,
+      );
+
+      return;
+    }
+
+    console.log("[EditorTransform] Position update", {
+      entity: entity.name,
+      from: entity.transform.position.clone(),
+      to: { x, y, z },
+    });
+
+    entity.transform.setPosition(x, y, z);
+  }
+
+  // ============================================================
+  // ROTATION
+  // ============================================================
+
+  setRotation(x, y, z) {
+    if (!this.entity) return;
+
+    this.entity.transform.setRotation(x, y, z);
+  }
+
+  rotate(delta) {
+    if (!this.entity || !delta) return;
+
+    this.entity.transform.rotate(delta.x, delta.y, delta.z);
+  }
+
+  // ============================================================
+  // ENTITY ROTATION
+  // ============================================================
+
+  setEntityRotation(entity, x, y, z) {
+    if (!entity) return;
+
+    if (!entity.transform) return;
+
+    entity.transform.setRotation(x, y, z);
+  }
+
+  // ============================================================
+  // SCALE
+  // ============================================================
+
+  setScale(x, y, z) {
+    if (!this.entity) return;
+
+    this.entity.transform.setScale(x, y, z);
+  }
+
+  scaleBy(delta) {
+    if (!this.entity || !delta) return;
+
+    this.entity.transform.scaleBy(delta.x, delta.y, delta.z);
+  }
+
+  // ============================================================
+  // ENTITY SCALE
+  // ============================================================
+
+  setEntityScale(entity, x, y, z) {
+    if (!entity) return;
+
+    if (!entity.transform) return;
+
+    entity.transform.setScale(x, y, z);
+  }
+}
+
+export default new EditorTransform();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\transform\index.js
+==============================
+
+export { default as EditorTransform } from "./EditorTransform";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\BoundingBoxRenderer.jsx
+==============================
+
+export default function BoundingBoxRenderer() {
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\EditorVisualManager.jsx
+==============================
+
+import OutlineRenderer from "./OutlineRenderer";
+import BoundingBoxRenderer from "./BoundingBoxRenderer";
+import PhysicsRenderer from "./PhysicsRenderer";
+
+import { GizmoManager } from "../gizmos";
+
+export default function EditorVisualManager() {
+  return (
+    <>
+      <OutlineRenderer />
+
+      <BoundingBoxRenderer />
+
+      <PhysicsRenderer />
+
+      <GizmoManager />
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\EditorVisualService.js
+==============================
+
+import SceneService from "../../scene/SceneService";
+
+class EditorVisualService {
+  constructor() {
+    this.helpers = new Map();
+  }
+
+  //--------------------------------------------------
+  // Add
+  //--------------------------------------------------
+
+  add(name, helper) {
+    this.remove(name);
+
+    this.helpers.set(
+      name,
+
+      helper,
+    );
+
+    SceneService.add(helper);
+  }
+
+  //--------------------------------------------------
+  // Remove
+  //--------------------------------------------------
+
+  remove(name) {
+    const helper = this.helpers.get(name);
+
+    if (!helper) return;
+
+    SceneService.remove(helper);
+
+    if (helper.dispose) helper.dispose();
+
+    this.helpers.delete(name);
+  }
+
+  //--------------------------------------------------
+  // Get
+  //--------------------------------------------------
+
+  get(name) {
+    return this.helpers.get(name);
+  }
+
+  //--------------------------------------------------
+  // Clear
+  //--------------------------------------------------
+
+  clear() {
+    this.helpers.forEach((helper) => {
+      SceneService.remove(helper);
+
+      if (helper.dispose) helper.dispose();
+    });
+
+    this.helpers.clear();
+  }
+}
+
+export default new EditorVisualService();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\index.js
+==============================
+
+export { default as EditorVisualManager } from "./EditorVisualManager";
+
+export { default as EditorVisualService } from "./EditorVisualService";
+
+export { default as OutlineRenderer } from "./OutlineRenderer";
+
+export { default as BoundingBoxRenderer } from "./BoundingBoxRenderer";
+
+export { default as PhysicsRenderer } from "./PhysicsRenderer";
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\OutlineRenderer.jsx
+==============================
+
+import { useEffect, useRef } from "react";
+
+import * as THREE from "three";
+
+import { useFrame } from "@react-three/fiber";
+
+import { EventBus, EngineEvents } from "../../events";
+
+import { EditorVisualService } from "./";
+
+export default function OutlineRenderer() {
+  const meshRef = useRef(null);
+
+  //--------------------------------------------------
+
+  function onSelected(entity) {
+    meshRef.current = entity?.getObject() ?? null;
+
+    if (!meshRef.current) return;
+
+    const helper = new THREE.BoxHelper(
+      meshRef.current,
+
+      0xffff00,
+    );
+
+    EditorVisualService.add(
+      "outline",
+
+      helper,
+    );
+  }
+
+  //--------------------------------------------------
+
+  function onDeselected() {
+    meshRef.current = null;
+
+    EditorVisualService.remove("outline");
+  }
+
+  //--------------------------------------------------
+
+  useFrame(() => {
+    const helper = EditorVisualService.get("outline");
+
+    if (helper) helper.update();
+  });
+
+  //--------------------------------------------------
+
+  useEffect(() => {
+    EventBus.on(
+      EngineEvents.ENTITY_SELECTED,
+
+      onSelected,
+    );
+
+    EventBus.on(
+      EngineEvents.ENTITY_DESELECTED,
+
+      onDeselected,
+    );
+
+    return () => {
+      EventBus.off(
+        EngineEvents.ENTITY_SELECTED,
+
+        onSelected,
+      );
+
+      EventBus.off(
+        EngineEvents.ENTITY_DESELECTED,
+
+        onDeselected,
+      );
+
+      EditorVisualService.remove("outline");
+    };
+  }, []);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\PhysicsRenderer.jsx
+==============================
+
+export default function PhysicsRenderer() {
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\CameraComponent.js
+==============================
+
+import Component from "./Component";
+
+export default class CameraComponent extends Component {
+
+    constructor(camera = null) {
+
+        super("Camera");
+
+        this.camera = camera;
+
+    }
+
+    setCamera(camera) {
+
+        this.camera = camera;
+
+    }
+
+    getCamera() {
+
+        return this.camera;
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\Component.js
+==============================
+
+export default class Component {
+
+    constructor(type = "Component") {
+
+        this.type = type;
+
+        this.enabled = true;
+
+        this.started = false;
+
+        this.entity = null;
+
+    }
+
+    onAttach(entity) {
+
+        this.entity = entity;
+
+    }
+
+    onDetach() {
+
+        this.entity = null;
+
+    }
+
+    start() {}
+
+    update() {}
+
+    lateUpdate() {}
+
+    fixedUpdate() {}
+
+    destroy() {}
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\Entity.js
+==============================
+
+import Transform from "./Transform";
+
+let nextID = 1;
+
+export default class Entity {
+  constructor(name = "Entity", type = "Entity") {
+    this.id = nextID++;
+
+    this.uuid = crypto.randomUUID();
+
+    this.name = name;
+    this.type = type;
+
+    this.enabled = true;
+    this.visible = true;
+
+    this.transform = new Transform(this);
+
+    this.parent = null;
+
+    this.children = [];
+
+    this.components = [];
+
+    this.object3D = null;
+  }
+
+  // --------------------------------------------------
+  // Hierarchy
+  // --------------------------------------------------
+
+  add(child) {
+    if (!child || child === this) {
+      return;
+    }
+
+    if (child.parent === this) {
+      return;
+    }
+
+    if (child.parent) {
+      child.parent.remove(child);
+    }
+
+    child.parent = this;
+
+    this.children.push(child);
+
+    const parentObject = this.getObject();
+    const childObject = child.getObject();
+
+    if (parentObject && childObject) {
+      parentObject.add(childObject);
+    }
+
+    console.log("[Entity] Child added", {
+      parent: this.name,
+      child: child.name,
+    });
+  }
+
+  remove(child) {
+    if (!child) {
+      return;
+    }
+
+    const index = this.children.indexOf(child);
+
+    if (index === -1) {
+      return;
+    }
+
+    this.children.splice(index, 1);
+
+    const parentObject = this.getObject();
+    const childObject = child.getObject();
+
+    if (parentObject && childObject) {
+      parentObject.remove(childObject);
+    }
+
+    child.parent = null;
+
+    console.log("[Entity] Child removed", {
+      parent: this.name,
+      child: child.name,
+    });
+  }
+
+  clear() {
+    [...this.children].forEach((child) => {
+      this.remove(child);
+    });
+  }
+
+  // --------------------------------------------------
+  // Components
+  // --------------------------------------------------
+
+  addComponent(component) {
+    if (!component) {
+      return;
+    }
+
+    component.onAttach(this);
+
+    this.components.push(component);
+  }
+
+  removeComponent(type) {
+    this.components = this.components.filter((component) => {
+      if (component.type !== type) {
+        return true;
+      }
+
+      component.onDetach?.();
+
+      return false;
+    });
+  }
+
+  getComponent(type) {
+    return this.components.find((component) => component.type === type);
+  }
+
+  // --------------------------------------------------
+  // Update
+  // --------------------------------------------------
+
+  update(delta) {
+    if (!this.enabled) {
+      return;
+    }
+
+    this.components.forEach((component) => {
+      if (!component.enabled) {
+        return;
+      }
+
+      if (!component.started) {
+        component.started = true;
+
+        component.start?.();
+      }
+
+      component.update?.(delta);
+    });
+  }
+
+  lateUpdate(delta) {
+    if (!this.enabled) {
+      return;
+    }
+
+    this.components.forEach((component) => {
+      if (component.enabled) {
+        component.lateUpdate?.(delta);
+      }
+    });
+  }
+
+  fixedUpdate(delta) {
+    if (!this.enabled) {
+      return;
+    }
+
+    this.components.forEach((component) => {
+      if (component.enabled) {
+        component.fixedUpdate?.(delta);
+      }
+    });
+  }
+
+  // --------------------------------------------------
+  // Three.js Object
+  // --------------------------------------------------
+
+  setObject(object) {
+    this.object3D = object;
+
+    if (object) {
+      object.userData.entity = this;
+      object.userData.entityId = this.id;
+      object.userData.entityUUID = this.uuid;
+    }
+  }
+
+  getObject() {
+    return this.object3D;
+  }
+
+  // --------------------------------------------------
+  // Transform Sync
+  // --------------------------------------------------
+
+  syncTransformToObject() {
+    const object = this.getObject();
+
+    if (!object) {
+      return;
+    }
+
+    object.position.copy(this.transform.position);
+    object.rotation.copy(this.transform.rotation);
+    object.scale.copy(this.transform.scale);
+
+    object.visible = this.visible;
+  }
+
+  syncTransformFromObject() {
+    const object = this.getObject();
+
+    if (!object) {
+      return;
+    }
+
+    this.transform.position.copy(object.position);
+    this.transform.rotation.copy(object.rotation);
+    this.transform.scale.copy(object.scale);
+
+    this.visible = object.visible;
+  }
+
+  // --------------------------------------------------
+  // Destroy
+  // --------------------------------------------------
+
+  destroy() {
+    this.components.forEach((component) => {
+      component.enabled = false;
+
+      component.onDetach?.();
+      component.destroy?.();
+    });
+
+    this.components = [];
+
+    this.clear();
+
+    if (this.object3D) {
+      this.object3D.userData.entity = null;
+      this.object3D.userData.entityId = null;
+      this.object3D.userData.entityUUID = null;
+    }
+
+    this.parent = null;
+    this.object3D = null;
+  }
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\EntityFactory.js
+==============================
+
+import * as THREE from "three";
+
+import Entity from "./Entity";
+import MeshComponent from "./MeshComponent";
+
+class EntityFactory {
+  // --------------------------------------------------
+  // Mesh Entity
+  // --------------------------------------------------
+
+  createMeshEntity({ name = "Mesh", type = "Mesh", geometry, material }) {
+    if (!geometry) {
+      console.error("[EntityFactory] Missing geometry:", name);
+      return null;
+    }
+
+    if (!material) {
+      console.error("[EntityFactory] Missing material:", name);
+      return null;
+    }
+
+    const mesh = new THREE.Mesh(geometry, material);
+
+    const entity = new Entity(name, type);
+
+    this.attachObject(entity, mesh);
+
+    entity.addComponent(new MeshComponent(mesh));
+
+    return entity;
+  }
+
+  // --------------------------------------------------
+  // Group Entity
+  // --------------------------------------------------
+
+  createGroupEntity({ name = "Entity", type = "Entity" } = {}) {
+    const group = new THREE.Group();
+
+    const entity = new Entity(name, type);
+
+    this.attachObject(entity, group);
+
+    return entity;
+  }
+
+  // --------------------------------------------------
+  // Attach Object
+  // --------------------------------------------------
+
+  attachObject(entity, object) {
+    if (!entity || !object) {
+      console.error("[EntityFactory] attachObject failed", {
+        entity,
+        object,
+      });
+
+      return null;
+    }
+
+    object.name = entity.name;
+
+    object.userData.entity = entity;
+    object.userData.entityId = entity.id;
+    object.userData.entityUUID = entity.uuid;
+
+    object.userData.ignoreRaycast = false;
+    object.userData.novaEntityRoot = true;
+
+    entity.setObject(object);
+
+    return object;
+  }
+
+  // --------------------------------------------------
+  // Add Child Object
+  // --------------------------------------------------
+
+  addChildObject(entity, object) {
+    const parent = entity?.getObject?.();
+
+    if (!parent || !object) {
+      console.warn("[EntityFactory] addChildObject failed", {
+        entity,
+        object,
+      });
+
+      return null;
+    }
+
+    parent.add(object);
+
+    return object;
+  }
+}
+
+export default new EntityFactory();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\EntityManager.js
+==============================
+
+class EntityManager {
+  constructor() {
+    this.entities = [];
+  }
+
+  //--------------------------------------------------
+  // CRUD
+  //--------------------------------------------------
+
+  add(entity) {
+    this.entities.push(entity);
+  }
+
+  remove(entity) {
+    this.entities = this.entities.filter((e) => e !== entity);
+  }
+
+  clear() {
+    this.entities = [];
+  }
+
+  //--------------------------------------------------
+  // Update Loop
+  //--------------------------------------------------
+
+  update(delta) {
+    this.entities.forEach((entity) => {
+      if (!entity.enabled) return;
+
+      entity.update(delta);
+    });
+  }
+
+  lateUpdate(delta) {
+    this.entities.forEach((entity) => {
+      if (!entity.enabled) return;
+
+      entity.lateUpdate(delta);
+    });
+  }
+
+  fixedUpdate(delta) {
+    this.entities.forEach((entity) => {
+      if (!entity.enabled) return;
+
+      entity.fixedUpdate(delta);
+    });
+  }
+
+  //--------------------------------------------------
+  // Search
+  //--------------------------------------------------
+
+  getAll() {
+    return [...this.entities];
+  }
+
+  count() {
+    return this.entities.length;
+  }
+
+  getByUUID(uuid) {
+    return this.entities.find((entity) => entity.uuid === uuid);
+  }
+
+  getById(id) {
+    return this.entities.find((entity) => entity.id === id);
+  }
+
+  getByName(name) {
+    return this.entities.find((entity) => entity.name === name);
+  }
+}
+
+export default new EntityManager();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\index.js
+==============================
+
+export { default as Component } from "./Component";
+
+export { default as Entity } from "./Entity";
+
+export { default as MeshEntity } from "./MeshEntity";
+
+export { default as MeshComponent } from "./MeshComponent";
+
+export { default as CameraComponent } from "./CameraComponent";
+
+export { default as LightComponent } from "./LightComponent";
+
+export { default as ScriptComponent } from "./ScriptComponent";
+
+export { default as EntityFactory } from "./EntityFactory";
+
+export { default as EntityManager } from "./EntityManager";
+
+export { default as SceneGraph } from "./SceneGraph";
+
+export { default as SceneNode } from "./SceneNode";
+
+export { default as Transform } from "./Transform";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\LightComponent.js
+==============================
+
+import Component from "./Component";
+import SceneService from "../scene/SceneService";
+
+export default class LightComponent extends Component {
+
+    constructor(light = null) {
+
+        super("Light");
+
+        this.light = light;
+
+    }
+
+    onAttach(entity) {
+
+        super.onAttach(entity);
+
+        if (this.light)
+            SceneService.add(this.light);
+
+    }
+
+    onDetach() {
+
+        if (this.light)
+            SceneService.remove(this.light);
+
+        super.onDetach();
+
+    }
+
+    setLight(light) {
+
+        this.light = light;
+
+    }
+
+    getLight() {
+
+        return this.light;
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\MeshComponent.js
+==============================
+
+import Component from "./Component";
+
+export default class MeshComponent extends Component {
+  constructor(mesh = null) {
+    super("Mesh");
+
+    this.mesh = mesh;
+  }
+
+  onAttach(entity) {
+    super.onAttach(entity);
+  }
+
+  onDetach() {
+    super.onDetach();
+  }
+
+  setMesh(mesh) {
+    this.mesh = mesh;
+  }
+
+  getMesh() {
+    return this.mesh;
+  }
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\MeshEntity.js
+==============================
+
+import * as THREE from "three";
+
+import Entity from "./Entity";
+import MeshComponent from "./MeshComponent";
+
+export default class MeshEntity extends Entity {
+
+    constructor(
+
+        name = "Mesh",
+
+        geometry,
+
+        material
+
+    ) {
+
+        super(
+
+            name,
+
+            "Mesh"
+
+        );
+
+        const mesh = new THREE.Mesh(
+
+            geometry,
+
+            material
+
+        );
+
+        mesh.castShadow = true;
+
+        mesh.receiveShadow = true;
+
+        mesh.userData.entity = this;
+
+        this.setObject(mesh);
+
+        this.addComponent(
+
+            new MeshComponent(mesh)
+
+        );
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\SceneGraph.js
+==============================
+
+import SceneNode from "./SceneNode";
+
+export default class SceneGraph {
+  constructor() {
+    this.root = new SceneNode("Root");
+  }
+
+  //--------------------------------------------------
+  // Entity
+  //--------------------------------------------------
+
+  add(entity) {
+    if (!entity) return;
+
+    // Do not use root.add().
+    //
+    // The root is only the SceneGraph container.
+    // Top-level entities should not receive the
+    // artificial Root entity as their logical parent.
+    if (this.root.children.includes(entity)) {
+      return;
+    }
+
+    this.root.children.push(entity);
+  }
+
+  remove(entity) {
+    if (!entity) return;
+
+    const index = this.root.children.indexOf(entity);
+
+    if (index === -1) return;
+
+    this.root.children.splice(index, 1);
+  }
+
+  clear() {
+    this.root.children = [];
+  }
+
+  //--------------------------------------------------
+  // Traversal
+  //--------------------------------------------------
+
+  traverse(callback) {
+    const walk = (node) => {
+      callback(node);
+
+      node.children.forEach(walk);
+    };
+
+    walk(this.root);
+  }
+
+  //--------------------------------------------------
+  // Lifecycle
+  //--------------------------------------------------
+
+  update(delta) {
+    this.traverse((entity) => {
+      if (entity.update) {
+        entity.update(delta);
+      }
+    });
+  }
+
+  lateUpdate(delta) {
+    this.traverse((entity) => {
+      if (!entity.enabled) return;
+
+      entity.lateUpdate(delta);
+    });
+  }
+
+  fixedUpdate(delta) {
+    this.traverse((entity) => {
+      if (!entity.enabled) return;
+
+      entity.fixedUpdate(delta);
+    });
+  }
+
+  //--------------------------------------------------
+  // Search
+  //--------------------------------------------------
+
+  findByID(id) {
+    let result = null;
+
+    this.traverse((entity) => {
+      if (entity.id === id) {
+        result = entity;
+      }
+    });
+
+    return result;
+  }
+
+  findByName(name) {
+    let result = null;
+
+    this.traverse((entity) => {
+      if (entity.name === name) {
+        result = entity;
+      }
+    });
+
+    return result;
+  }
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\SceneNode.js
+==============================
+
+import Entity from "./Entity";
+
+export default class SceneNode extends Entity {
+
+    constructor(name = "Node") {
+
+        super(
+
+            name,
+
+            "SceneNode"
+
+        );
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\ScriptComponent.js
+==============================
+
+import Component from "./Component";
+
+export default class ScriptComponent extends Component {
+
+    constructor(script = () => {}) {
+
+        super("Script");
+
+        this.script = script;
+
+    }
+
+    start() {
+
+        if (this.script.start)
+            this.script.start();
+
+    }
+
+    update(delta) {
+
+        if (!this.enabled)
+            return;
+
+        if (this.script.update)
+            this.script.update(delta);
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\entity\Transform.js
+==============================
+
+import * as THREE from "three";
+
+import { EventBus, EngineEvents } from "../events";
+
+export default class Transform {
+  constructor(entity = null) {
+    this.entity = entity;
+
+    this.position = new THREE.Vector3();
+
+    this.rotation = new THREE.Euler();
+
+    this.scale = new THREE.Vector3(1, 1, 1);
+
+    this.matrix = new THREE.Matrix4();
+    this.worldMatrix = new THREE.Matrix4();
+
+    this.dirty = true;
+  }
+
+  // ============================================================
+  // DIRTY
+  // ============================================================
+
+  markDirty() {
+    this.dirty = true;
+
+    if (this.entity) {
+      EventBus.emit(EngineEvents.TRANSFORM_CHANGED, this.entity);
+    }
+  }
+
+  clearDirty() {
+    this.dirty = false;
+  }
+
+  isDirty() {
+    return this.dirty;
+  }
+
+  // ============================================================
+  // POSITION
+  // ============================================================
+
+  setPosition(x = 0, y = 0, z = 0) {
+    this.position.set(x, y, z);
+
+    this.markDirty();
+
+    if (this.entity) {
+      EventBus.emit(EngineEvents.POSITION_CHANGED, this.entity);
+    }
+  }
+
+  translate(x = 0, y = 0, z = 0) {
+    this.position.x += x;
+    this.position.y += y;
+    this.position.z += z;
+
+    this.markDirty();
+
+    if (this.entity) {
+      EventBus.emit(EngineEvents.POSITION_CHANGED, this.entity);
+    }
+  }
+
+  // ============================================================
+  // ROTATION
+  // ============================================================
+
+  setRotation(x = 0, y = 0, z = 0) {
+    this.rotation.set(x, y, z);
+
+    this.markDirty();
+
+    if (this.entity) {
+      EventBus.emit(EngineEvents.ROTATION_CHANGED, this.entity);
+    }
+  }
+
+  rotate(x = 0, y = 0, z = 0) {
+    this.rotation.x += x;
+    this.rotation.y += y;
+    this.rotation.z += z;
+
+    this.markDirty();
+
+    if (this.entity) {
+      EventBus.emit(EngineEvents.ROTATION_CHANGED, this.entity);
+    }
+  }
+
+  // ============================================================
+  // SCALE
+  // ============================================================
+
+  setScale(x = 1, y = 1, z = 1) {
+    this.scale.set(x, y, z);
+
+    this.markDirty();
+
+    if (this.entity) {
+      EventBus.emit(EngineEvents.SCALE_CHANGED, this.entity);
+    }
+  }
+
+  scaleBy(x = 1, y = 1, z = 1) {
+    this.scale.multiply(new THREE.Vector3(x, y, z));
+
+    this.markDirty();
+
+    if (this.entity) {
+      EventBus.emit(EngineEvents.SCALE_CHANGED, this.entity);
+    }
+  }
+
+  // ============================================================
+  // MATRIX
+  // ============================================================
+
+  updateMatrix() {
+    const quaternion = new THREE.Quaternion();
+
+    quaternion.setFromEuler(this.rotation);
+
+    this.matrix.compose(this.position, quaternion, this.scale);
+
+    this.worldMatrix.copy(this.matrix);
+
+    this.clearDirty();
+  }
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\environment\EnvironmentManager.jsx
+==============================
+
+import { useFrame } from "@react-three/fiber";
+
+import Ground from "./Ground";
+import SkyComponent from "./Sky";
+
+import TimeManager from "./TimeManager";
+
+export default function EnvironmentManager() {
+  useFrame((_, delta) => {
+    TimeManager.update(delta);
+  });
+
+  return (
+    <>
+      <SkyComponent />
+
+      <Ground />
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\environment\Ground.jsx
+==============================
+
+import { useEffect } from "react";
+import * as THREE from "three";
+
+import EntityFactory from "../entity/EntityFactory";
+import World from "../world/World";
+
+export default function Ground({ position = [0, 0, 0] } = {}) {
+  useEffect(() => {
+    console.log("[Ground] Effect started");
+    console.log("[Ground] Position:", position);
+    console.log("[Ground] World running:", World.running);
+
+    const entity = EntityFactory.createMeshEntity({
+      name: "Ground",
+      type: "Ground",
+
+      geometry: new THREE.PlaneGeometry(100, 100),
+
+      material: new THREE.MeshStandardMaterial({
+        color: "#4f8a3f",
+      }),
+    });
+
+    if (!entity) {
+      console.error("[Ground] Failed to create entity");
+      return;
+    }
+
+    console.log("[Ground] Entity created:", entity);
+
+    const object = entity.getObject();
+
+    if (!object) {
+      console.error("[Ground] Entity has no Object3D:", entity);
+      return;
+    }
+
+    object.receiveShadow = true;
+
+    // --------------------------------------------------
+    // Position
+    // --------------------------------------------------
+
+    entity.transform.setPosition(
+      position[0] ?? 0,
+      position[1] ?? 0,
+      position[2] ?? 0,
+    );
+
+    // --------------------------------------------------
+    // Rotation
+    //
+    // PlaneGeometry starts vertical (XY plane).
+    // Ground must lie horizontally on the XZ plane.
+    //
+    // IMPORTANT:
+    // Rotation belongs to Entity.transform, not directly
+    // on the Three.js object, because TransformSystem
+    // synchronizes Entity -> Object every frame.
+    // --------------------------------------------------
+
+    entity.transform.setRotation(-Math.PI / 2, 0, 0);
+
+    entity.syncTransformToObject();
+
+    console.log("[Ground] Before spawn");
+
+    World.spawn(entity);
+
+    console.log("[Ground] Spawned:", entity);
+
+    return () => {
+      console.log("[Ground] Cleanup:", entity);
+
+      if (World.running) {
+        World.despawn(entity);
+      }
+    };
+  }, [position]);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\environment\index.js
+==============================
+
+export { default as Ground } from "./Ground";
+export { default as SkyComponent } from "./Sky";
+export { default as EnvironmentManager } from "./EnvironmentManager";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\environment\Sky.jsx
+==============================
+
+import { Sky } from "@react-three/drei";
+
+export default function SkyComponent() {
+  return (
+    <Sky
+      distance={450000}
+      sunPosition={[5, 1, 8]}
+      inclination={0.49}
+      azimuth={0.25}
+      onUpdate={(self) => {
+        self.userData.ignoreRaycast = true;
+      }}
+    />
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\environment\TimeManager.js
+==============================
+
+class TimeManager {
+  constructor() {
+    this.time = 12;
+    this.speed = 1;
+  }
+
+  update(delta) {
+    this.time += delta * this.speed;
+
+    if (this.time >= 24) {
+      this.time = 0;
+    }
+  }
+}
+
+export default new TimeManager();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\environment\WeatherManager.js
+==============================
+
+class WeatherManager {
+  constructor() {
+    this.weather = "Sunny";
+  }
+
+  set(weather) {
+    this.weather = weather;
+  }
+
+  get() {
+    return this.weather;
+  }
+}
+
+export default new WeatherManager();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\events\EngineEvents.js
+==============================
+
+const EngineEvents = {
+  //----------------------------------
+  // Entity
+  //----------------------------------
+
+  ENTITY_CREATED: "entity:created",
+
+  ENTITY_DESTROYED: "entity:destroyed",
+
+  ENTITY_SELECTED: "entity:selected",
+
+  ENTITY_DESELECTED: "entity:deselected",
+
+  //----------------------------------
+  // Transform
+  //----------------------------------
+
+  TRANSFORM_CHANGED: "transform:changed",
+
+  POSITION_CHANGED: "position:changed",
+
+  ROTATION_CHANGED: "rotation:changed",
+
+  SCALE_CHANGED: "scale:changed",
+};
+
+export default EngineEvents;
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\events\EventBus.js
+==============================
+
+class EventBus {
+
+    constructor() {
+
+        this.listeners = {};
+
+    }
+
+    //----------------------------------
+    // Subscribe
+    //----------------------------------
+
+    on(event, callback) {
+
+        if (!this.listeners[event]) {
+
+            this.listeners[event] = [];
+
+        }
+
+        this.listeners[event].push(callback);
+
+    }
+
+    //----------------------------------
+    // Remove Listener
+    //----------------------------------
+
+    off(event, callback) {
+
+        if (!this.listeners[event])
+
+            return;
+
+        this.listeners[event] =
+
+            this.listeners[event].filter(
+
+                listener => listener !== callback
+
+            );
+
+    }
+
+    //----------------------------------
+    // Emit
+    //----------------------------------
+
+    emit(event, payload = null) {
+
+        if (!this.listeners[event])
+
+            return;
+
+        this.listeners[event].forEach(listener =>
+
+            listener(payload)
+
+        );
+
+    }
+
+    //----------------------------------
+    // Clear
+    //----------------------------------
+
+    clear() {
+
+        this.listeners = {};
+
+    }
+
+}
+
+export default new EventBus();
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\events\index.js
+==============================
+
+export { default as EventBus } from "./EventBus";
+export { default as EngineEvents } from "./EngineEvents";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\helpers\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\helpers\MathHelper.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\helpers\PerformanceHelper.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\helpers\SceneHelper.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\input\GamepadInput.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\input\index.js
+==============================
+
+export { default as InputManager } from "./InputManager";
+export { default as PointerLock } from "./PointerLock";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\input\InputManager.jsx
+==============================
+
+export default function InputManager() {
+    return null;
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\input\KeyboardInput.js
+==============================
+
+import useEngineStore from "../../store/engineStore";
+
+export default function initializeKeyboardInput() {
+
+    const { setKeyboard } = useEngineStore.getState();
+
+    const keyboard = {};
+
+    const onKeyDown = (event) => {
+
+        keyboard[event.code] = true;
+
+        setKeyboard({ ...keyboard });
+
+    };
+
+    const onKeyUp = (event) => {
+
+        keyboard[event.code] = false;
+
+        setKeyboard({ ...keyboard });
+
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+
+    return () => {
+        window.removeEventListener("keydown", onKeyDown);
+        window.removeEventListener("keyup", onKeyUp);
+    };
+
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\input\MouseInput.js
+==============================
+
+import useEngineStore from "../../store/engineStore";
+
+export default function initializeMouseInput() {
+  const { setMouse } = useEngineStore.getState();
+
+  function update(changes) {
+    const mouse = useEngineStore.getState().mouse;
+    const nextChanges =
+      typeof changes === "function" ? changes(mouse) : changes;
+
+    setMouse({ ...mouse, ...nextChanges });
+  }
+
+  //------------------------------------------------------
+  // Mouse Move
+  //------------------------------------------------------
+
+  const onMouseMove = (event) => {
+    update((mouse) => ({
+      x: event.clientX,
+      y: event.clientY,
+      deltaX: mouse.deltaX + event.movementX,
+      deltaY: mouse.deltaY + event.movementY,
+    }));
+
+  };
+
+  //------------------------------------------------------
+  // Mouse Buttons
+  //------------------------------------------------------
+
+  const onMouseDown = (event) => {
+    if (event.button === 0) update({ left: true });
+
+    if (event.button === 1) update({ middle: true });
+
+    if (event.button === 2) update({ right: true });
+  };
+
+  const onMouseUp = (event) => {
+    if (event.button === 0) update({ left: false });
+
+    if (event.button === 1) update({ middle: false });
+
+    if (event.button === 2) update({ right: false });
+  };
+
+  //------------------------------------------------------
+  // Mouse Wheel
+  //------------------------------------------------------
+
+  const onWheel = (event) => {
+    update((mouse) => ({
+      wheel: mouse.wheel + event.deltaY,
+    }));
+
+  };
+
+  //------------------------------------------------------
+  // Pointer Lock
+  //------------------------------------------------------
+
+  const onPointerLockChange = () => {
+    update({
+      locked: document.pointerLockElement !== null,
+      // Prevent a movement jump after locking or unlocking.
+      deltaX: 0,
+      deltaY: 0,
+    });
+  };
+
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mousedown", onMouseDown);
+  window.addEventListener("mouseup", onMouseUp);
+  window.addEventListener("wheel", onWheel);
+  document.addEventListener("pointerlockchange", onPointerLockChange);
+
+  return () => {
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mousedown", onMouseDown);
+    window.removeEventListener("mouseup", onMouseUp);
+    window.removeEventListener("wheel", onWheel);
+    document.removeEventListener("pointerlockchange", onPointerLockChange);
+  };
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\input\PointerLock.jsx
+==============================
+
+import { useEffect } from "react";
+
+export default function PointerLock() {
+
+    useEffect(() => {
+
+        const canvas = document.querySelector("canvas");
+
+        if (!canvas)
+            return;
+
+        const handleMouseDown = (event) => {
+
+            // Left Mouse Button enters Pointer Lock
+            if (event.button === 0) {
+
+                if (document.pointerLockElement !== canvas) {
+
+                    canvas.requestPointerLock();
+
+                }
+
+            }
+
+        };
+
+        canvas.addEventListener(
+            "mousedown",
+            handleMouseDown
+        );
+
+        return () => {
+
+            canvas.removeEventListener(
+                "mousedown",
+                handleMouseDown
+            );
+
+        };
+
+    }, []);
+
+    return null;
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\input\TouchInput.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\lighting\AmbientLight.jsx
+==============================
+
+export default function AmbientLight() {
+  return (
+    <ambientLight intensity={0.7} />
+  );
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\lighting\index.js
+==============================
+
+export { default as AmbientLight } from "./AmbientLight";
+export { default as SunLight } from "./SunLight";
+export { default as LightingManager } from "./LightingManager";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\lighting\LightingManager.jsx
+==============================
+
+import AmbientLight from "./AmbientLight";
+import SunLight from "./SunLight";
+
+export default function LightingManager() {
+  return (
+    <>
+      <AmbientLight />
+      <SunLight />
+    </>
+  );
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\lighting\SunLight.jsx
+==============================
+
+export default function SunLight() {
+  return (
+    <directionalLight
+      castShadow
+      intensity={2}
+      position={[20, 30, 10]}
+      shadow-mapSize-width={2048}
+      shadow-mapSize-height={2048}
+    />
+  );
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\loaders\HDRLoader.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\loaders\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\loaders\ModelLoader.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\loaders\TextureLoader.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\loop\EngineLoop.jsx
+==============================
+
+import { useFrame } from "@react-three/fiber";
+
+import World from "../world/World";
+
+export default function EngineLoop() {
+  useFrame((state, delta) => {
+    World.update(delta);
+
+    World.lateUpdate(delta);
+  });
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\loop\index.js
+==============================
+
+export { default as EngineLoop } from "./EngineLoop";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\materials\index.js
+==============================
+
+export { default as MaterialManager } from "./MaterialManager";
+
+export * from "./MaterialFactory";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\materials\MaterialFactory.js
+==============================
+
+import * as THREE from "three";
+
+export function createRoadMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: "#3a3a3a",
+    roughness: 0.95,
+    metalness: 0.05,
+  });
+}
+
+export function createGrassMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: "#4d8b31",
+    roughness: 1,
+    metalness: 0,
+  });
+}
+
+export function createBuildingMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: "#c8c8c8",
+    roughness: 0.7,
+    metalness: 0.1,
+  });
+}
+
+export function createGlassMaterial() {
+  return new THREE.MeshPhysicalMaterial({
+    color: "#dff5ff",
+    transparent: true,
+    transmission: 0.95,
+    roughness: 0,
+    metalness: 0,
+  });
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\materials\MaterialManager.js
+==============================
+
+class MaterialManager {
+
+    constructor() {
+
+        this.materials = new Map();
+
+    }
+
+    add(name, material) {
+
+        this.materials.set(name, material);
+
+    }
+
+    get(name) {
+
+        return this.materials.get(name);
+
+    }
+
+    has(name) {
+
+        return this.materials.has(name);
+
+    }
+
+}
+
+export default new MaterialManager();
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\performance\Benchmark.jsx
+==============================
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+export default function Benchmark() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const frameTimesRef = useRef([]);
+  const animationFrameRef = useRef(null);
+  const previousTimeRef = useRef(null);
+
+  // ============================================================
+  // START BENCHMARK
+  // ============================================================
+
+  const startBenchmark = useCallback(() => {
+    frameTimesRef.current = [];
+    previousTimeRef.current = null;
+
+    setResult(null);
+    setRunning(true);
+  }, []);
+
+  // ============================================================
+  // BENCHMARK LOOP
+  // ============================================================
+
+  useEffect(() => {
+    if (!running) {
+      return;
+    }
+
+    let disposed = false;
+
+    const measureFrame = (time) => {
+      if (disposed) {
+        return;
+      }
+
+      if (previousTimeRef.current !== null) {
+        const delta = time - previousTimeRef.current;
+
+        if (delta > 0 && delta < 1000) {
+          frameTimesRef.current.push(delta);
+        }
+      }
+
+      previousTimeRef.current = time;
+
+      // --------------------------------------------------------
+      // Finish after 120 measured frames
+      // --------------------------------------------------------
+
+      if (frameTimesRef.current.length >= 120) {
+        const frameTimes = frameTimesRef.current;
+
+        const totalTime = frameTimes.reduce(
+          (sum, frameTime) => sum + frameTime,
+          0,
+        );
+
+        const averageFrameTime =
+          frameTimes.length > 0 ? totalTime / frameTimes.length : 0;
+
+        const averageFPS = averageFrameTime > 0 ? 1000 / averageFrameTime : 0;
+
+        const minFrameTime =
+          frameTimes.length > 0 ? Math.min(...frameTimes) : 0;
+
+        const maxFrameTime =
+          frameTimes.length > 0 ? Math.max(...frameTimes) : 0;
+
+        const minFPS = maxFrameTime > 0 ? 1000 / maxFrameTime : 0;
+
+        const maxFPS = minFrameTime > 0 ? 1000 / minFrameTime : 0;
+
+        setResult({
+          frames: frameTimes.length,
+
+          averageFPS,
+
+          minFPS,
+
+          maxFPS,
+
+          averageFrameTime,
+
+          minFrameTime,
+
+          maxFrameTime,
+        });
+
+        setRunning(false);
+
+        animationFrameRef.current = null;
+
+        previousTimeRef.current = null;
+
+        return;
+      }
+
+      animationFrameRef.current = requestAnimationFrame(measureFrame);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(measureFrame);
+
+    return () => {
+      disposed = true;
+
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+
+        animationFrameRef.current = null;
+      }
+
+      previousTimeRef.current = null;
+    };
+  }, [running]);
+
+  // ============================================================
+  // FINAL CLEANUP
+  // ============================================================
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+
+        animationFrameRef.current = null;
+      }
+    };
+  }, []);
+
+  // ============================================================
+  // UI
+  // ============================================================
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+
+        top: 10,
+        right: 10,
+
+        width: 260,
+
+        padding: 12,
+
+        background: "rgba(20, 20, 20, 0.92)",
+
+        color: "#fff",
+
+        border: "1px solid #444",
+
+        borderRadius: 6,
+
+        fontFamily: "Arial, sans-serif",
+
+        fontSize: 13,
+
+        zIndex: 1000,
+
+        boxSizing: "border-box",
+      }}
+    >
+      {/* ========================================================
+          TITLE
+      ======================================================== */}
+
+      <div
+        style={{
+          fontSize: 14,
+
+          fontWeight: 600,
+
+          marginBottom: 10,
+        }}
+      >
+        Performance Benchmark
+      </div>
+
+      {/* ========================================================
+          START
+      ======================================================== */}
+
+      {!running && !result && (
+        <button
+          type="button"
+          onClick={startBenchmark}
+          style={{
+            width: "100%",
+
+            padding: "7px 10px",
+
+            background: "#2b2b2b",
+
+            color: "#fff",
+
+            border: "1px solid #555",
+
+            borderRadius: 4,
+
+            cursor: "pointer",
+          }}
+        >
+          Run Benchmark
+        </button>
+      )}
+
+      {/* ========================================================
+          RUNNING
+      ======================================================== */}
+
+      {running && (
+        <div>
+          <div
+            style={{
+              marginBottom: 8,
+            }}
+          >
+            Running benchmark...
+          </div>
+
+          <div
+            style={{
+              height: 4,
+
+              background: "#333",
+
+              borderRadius: 2,
+
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+
+                height: "100%",
+
+                background: "#4caf50",
+
+                animation: "novaBenchmarkPulse 1s infinite",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          RESULTS
+      ======================================================== */}
+
+      {!running && result && (
+        <>
+          <div
+            style={{
+              display: "grid",
+
+              gridTemplateColumns: "1fr 1fr",
+
+              gap: 8,
+
+              marginBottom: 12,
+            }}
+          >
+            <Metric label="Average FPS" value={result.averageFPS} />
+
+            <Metric label="Min FPS" value={result.minFPS} />
+
+            <Metric label="Max FPS" value={result.maxFPS} />
+
+            <Metric
+              label="Avg Frame"
+              value={`${result.averageFrameTime.toFixed(2)} ms`}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={startBenchmark}
+            style={{
+              width: "100%",
+
+              padding: "7px 10px",
+
+              background: "#2b2b2b",
+
+              color: "#fff",
+
+              border: "1px solid #555",
+
+              borderRadius: 4,
+
+              cursor: "pointer",
+            }}
+          >
+            Run Again
+          </button>
+        </>
+      )}
+
+      {/* ========================================================
+          ANIMATION
+      ======================================================== */}
+
+      <style>
+        {`
+          @keyframes novaBenchmarkPulse {
+            0% {
+              opacity: 0.35;
+            }
+
+            50% {
+              opacity: 1;
+            }
+
+            100% {
+              opacity: 0.35;
+            }
+          }
+        `}
+      </style>
+    </div>
+  );
+}
+
+// ============================================================
+// METRIC
+// ============================================================
+
+function Metric({ label, value }) {
+  return (
+    <div
+      style={{
+        padding: 8,
+
+        background: "#292929",
+
+        border: "1px solid #3d3d3d",
+
+        borderRadius: 4,
+      }}
+    >
+      <div
+        style={{
+          color: "#999",
+
+          fontSize: 11,
+
+          marginBottom: 3,
+        }}
+      >
+        {label}
+      </div>
+
+      <div
+        style={{
+          fontSize: 14,
+
+          fontWeight: 600,
+        }}
+      >
+        {typeof value === "number" ? value.toFixed(1) : value}
+      </div>
+    </div>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\performance\index.js
+==============================
+
+export { default as PerformanceStats } from "./PerformanceStats";
+export { default as Benchmark } from "./Benchmark";
+export { default as PerformanceManager } from "./PerformanceManager";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\performance\PerformanceManager.jsx
+==============================
+
+import PerformanceStats from "./PerformanceStats";
+import Benchmark from "./Benchmark";
+
+export default function PerformanceManager() {
+  return (
+    <>
+      <PerformanceStats />
+      <Benchmark />
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\performance\PerformanceStats.jsx
+==============================
+
+import { useEffect } from "react";
+import Stats from "stats.js";
+
+export default function PerformanceStats() {
+  useEffect(() => {
+    const stats = new Stats();
+
+    stats.showPanel(0);
+
+    stats.dom.style.position = "fixed";
+    stats.dom.style.top = "10px";
+    stats.dom.style.right = "10px";
+    stats.dom.style.left = "auto";
+    stats.dom.style.zIndex = "9999";
+
+    document.body.appendChild(stats.dom);
+
+    let animationId;
+
+    const animate = () => {
+      stats.begin();
+      stats.end();
+
+      animationId = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      stats.dom.remove();
+    };
+  }, []);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\physics\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\physics\PhysicsSystem.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\renderer\EngineCanvas.jsx
+==============================
+
+import { Canvas } from "@react-three/fiber";
+import * as THREE from "three";
+
+import Renderer from "./Renderer";
+import CameraController from "../camera/CameraController";
+import { SceneManager } from "../scene";
+import { EngineLoop } from "../loop";
+
+export default function EngineCanvas() {
+  return (
+    <Canvas
+      shadows
+      camera={{
+        position: [0, 5, 12],
+        fov: 60,
+      }}
+      dpr={[1, 2]}
+      gl={{
+        antialias: true,
+        powerPreference: "high-performance",
+        toneMapping: THREE.ACESFilmicToneMapping,
+        outputColorSpace: THREE.SRGBColorSpace,
+      }}
+    >
+      <Renderer />
+
+      <CameraController />
+
+      <EngineLoop />
+
+      <SceneManager />
+    </Canvas>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\renderer\index.js
+==============================
+
+export { default as EngineCanvas } from "./EngineCanvas";
+export { default as Renderer } from "./Renderer";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\renderer\Renderer.jsx
+==============================
+
+export default function Renderer() {
+  return null;
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\resources\AssetManager.js
+==============================
+
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
+class AssetManager {
+
+    constructor() {
+
+        this.loader = new GLTFLoader();
+
+        this.models = new Map();
+
+    }
+
+    async loadModel(path) {
+
+        if (this.models.has(path)) {
+
+            return this.models.get(path);
+
+        }
+
+        return new Promise((resolve, reject) => {
+
+            this.loader.load(
+
+                path,
+
+                (gltf) => {
+
+                    this.models.set(path, gltf);
+
+                    resolve(gltf);
+
+                },
+
+                undefined,
+
+                reject
+
+            );
+
+        });
+
+    }
+
+}
+
+export default new AssetManager();
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\resources\index.js
+==============================
+
+export { default as AssetManager } from "./AssetManager";
+export { default as ModelCache } from "./ModelCache";
+export { default as TextureCache } from "./TextureCache";
+export { default as LoadingManager } from "./LoadingManager";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\resources\LoadingManager.js
+==============================
+
+import * as THREE from "three";
+
+const loadingManager = new THREE.LoadingManager();
+
+loadingManager.onStart = () => {
+
+    console.log("Loading Started");
+
+};
+
+loadingManager.onLoad = () => {
+
+    console.log("Loading Complete");
+
+};
+
+loadingManager.onError = (url) => {
+
+    console.error(url);
+
+};
+
+export default loadingManager;
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\resources\ModelCache.js
+==============================
+
+class ModelCache {
+
+    constructor() {
+
+        this.cache = new Map();
+
+    }
+
+    add(key, value) {
+
+        this.cache.set(key, value);
+
+    }
+
+    get(key) {
+
+        return this.cache.get(key);
+
+    }
+
+    has(key) {
+
+        return this.cache.has(key);
+
+    }
+
+}
+
+export default new ModelCache();
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\resources\TextureCache.js
+==============================
+
+class TextureCache {
+
+    constructor() {
+
+        this.cache = new Map();
+
+    }
+
+    add(key, texture) {
+
+        this.cache.set(key, texture);
+
+    }
+
+    get(key) {
+
+        return this.cache.get(key);
+
+    }
+
+    has(key) {
+
+        return this.cache.has(key);
+
+    }
+
+}
+
+export default new TextureCache();
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\scene\index.js
+==============================
+
+export { default as SceneManager } from "./SceneManager";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\scene\SceneInitializer.jsx
+==============================
+
+import { useLayoutEffect } from "react";
+
+import { useThree } from "@react-three/fiber";
+
+import SceneService from "./SceneService";
+
+export default function SceneInitializer() {
+  const { scene } = useThree();
+
+  useLayoutEffect(() => {
+    console.log("[SceneInitializer] Initializing scene");
+
+    SceneService.initialize(scene);
+
+    console.log("[SceneInitializer] Scene initialized:", SceneService.scene);
+  }, [scene]);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\scene\SceneManager.jsx
+==============================
+
+import WorldManager from "../world/WorldManager";
+import { DebugWorld, DebugEntity } from "../debug";
+import { PerformanceManager } from "../performance";
+import { InputManager, PointerLock } from "../input";
+import { EditorScene } from "../editor";
+import SceneInitializer from "./SceneInitializer";
+
+export default function SceneManager() {
+  return (
+    <>
+      <SceneInitializer />
+
+      <InputManager />
+
+      <WorldManager />
+
+      <EditorScene />
+
+      <DebugWorld />
+
+      {/* <PointerLock /> */}
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\scene\SceneService.js
+==============================
+
+class SceneService {
+  constructor() {
+    this.scene = null;
+  }
+
+  initialize(scene) {
+    this.scene = scene;
+
+    console.log("[SceneService] Scene initialized:", scene);
+  }
+
+  add(object) {
+    if (!this.scene) {
+      console.error(
+        "[SceneService] Cannot add object. Scene is not initialized.",
+      );
+
+      return null;
+    }
+
+    if (!object) {
+      return null;
+    }
+
+    if (object.parent === this.scene) {
+      return object;
+    }
+
+    this.scene.add(object);
+
+    console.log("[SceneService] Added:", object.name);
+
+    return object;
+  }
+
+  remove(object) {
+    if (!this.scene || !object) {
+      return;
+    }
+
+    if (object.parent === this.scene) {
+      this.scene.remove(object);
+
+      console.log("[SceneService] Removed:", object.name);
+    }
+  }
+}
+
+export default new SceneService();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\shaders\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\systems\index.js
+==============================
+
+export { default as System } from "./System";
+export { default as SystemManager } from "./SystemManager";
+
+export { default as InputSystem } from "./InputSystem";
+export { default as PhysicsSystem } from "./PhysicsSystem";
+export { default as RenderSystem } from "./RenderSystem";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\systems\InputSystem.js
+==============================
+
+import System from "./System";
+
+export default class InputSystem extends System {
+
+    constructor() {
+
+        super("Input");
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\systems\PhysicsSystem.js
+==============================
+
+import System from "./System";
+
+export default class PhysicsSystem extends System {
+
+    constructor() {
+
+        super("Physics");
+
+    }
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\systems\RenderSystem.js
+==============================
+
+import System from "./System";
+
+import { EntityManager } from "../entity";
+
+export default class RenderSystem extends System {
+  constructor() {
+    super("RenderSystem");
+  }
+
+  update() {
+    EntityManager.getAll().forEach((entity) => {
+      if (!entity.enabled) return;
+
+      const object = entity.getObject();
+
+      if (!object) return;
+
+      //--------------------------------------------------
+      // Visibility
+      //--------------------------------------------------
+
+      object.visible = entity.visible;
+    });
+  }
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\systems\System.js
+==============================
+
+export default class System {
+
+    constructor(name = "System") {
+
+        this.name = name;
+
+        this.enabled = true;
+
+        this.started = false;
+
+        this.world = null;
+
+    }
+
+    //--------------------------------------------------
+    // World
+    //--------------------------------------------------
+
+    initialize(world) {
+
+        this.world = world;
+
+    }
+
+    destroy() {}
+
+    //--------------------------------------------------
+    // Lifecycle
+    //--------------------------------------------------
+
+    start() {}
+
+    update(delta) {}
+
+    lateUpdate(delta) {}
+
+    fixedUpdate(delta) {}
+
+}
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\systems\SystemManager.js
+==============================
+
+class SystemManager {
+
+    constructor() {
+
+        this.systems = [];
+
+    }
+
+    //--------------------------------------------------
+    // Register
+    //--------------------------------------------------
+
+    add(system) {
+
+        this.systems.push(system);
+
+    }
+
+    remove(system) {
+
+        this.systems = this.systems.filter(
+
+            s => s !== system
+
+        );
+
+    }
+
+    clear() {
+
+        this.systems = [];
+
+    }
+
+    //--------------------------------------------------
+    // Initialize
+    //--------------------------------------------------
+
+    initialize(world) {
+
+        this.systems.forEach(system => {
+
+            system.initialize(world);
+
+        });
+
+    }
+
+    //--------------------------------------------------
+    // Update
+    //--------------------------------------------------
+
+    update(delta) {
+
+        this.systems.forEach(system => {
+
+            if (!system.enabled)
+                return;
+
+            if (!system.started) {
+
+                system.started = true;
+
+                system.start();
+
+            }
+
+            system.update(delta);
+
+        });
+
+    }
+
+    lateUpdate(delta) {
+
+        this.systems.forEach(system => {
+
+            if (system.enabled)
+
+                system.lateUpdate(delta);
+
+        });
+
+    }
+
+    fixedUpdate(delta) {
+
+        this.systems.forEach(system => {
+
+            if (system.enabled)
+
+                system.fixedUpdate(delta);
+
+        });
+
+    }
+
+    //--------------------------------------------------
+    // Destroy
+    //--------------------------------------------------
+
+    destroy() {
+
+        this.systems.forEach(system => {
+
+            system.destroy();
+
+        });
+
+        this.clear();
+
+    }
+
+}
+
+export default new SystemManager();
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\transform\index.js
+==============================
+
+export { default as TransformSystem } from "./TransformSystem";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\transform\TransformSystem.js
+==============================
+
+import System from "../systems/System";
+
+export default class TransformSystem extends System {
+  constructor() {
+    super("Transform");
+  }
+
+  update() {
+    const rootChildren = this.world?.sceneGraph?.root?.children;
+
+    if (!rootChildren) {
+      console.warn("[TransformSystem] No scene graph root");
+      return;
+    }
+
+    rootChildren.forEach((entity) => {
+      this.updateEntity(entity);
+    });
+  }
+
+  updateEntity(entity) {
+    if (!entity) {
+      return;
+    }
+
+    if (!entity.transform) {
+      console.warn("[TransformSystem] Entity has no transform:", entity);
+
+      return;
+    }
+
+    entity.syncTransformToObject();
+
+    entity.children.forEach((child) => {
+      this.updateEntity(child);
+    });
+  }
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\world\index.js
+==============================
+
+export { default as World } from "./World";
+export { default as WorldManager } from "./WorldManager";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\world\World.js
+==============================
+
+import { SceneGraph, EntityManager } from "../entity";
+
+import {
+  SystemManager,
+  InputSystem,
+  PhysicsSystem,
+  RenderSystem,
+} from "../systems";
+
+import { TransformSystem } from "../transform";
+
+import useEngineStore from "../../store/engineStore";
+
+import { EventBus, EngineEvents } from "../events";
+
+import SceneService from "../scene/SceneService";
+
+class World {
+  constructor() {
+    this.sceneGraph = new SceneGraph();
+
+    this.running = false;
+    this.paused = false;
+
+    this.time = {
+      delta: 0,
+      elapsed: 0,
+      frame: 0,
+    };
+  }
+
+  // --------------------------------------------------
+  // Lifecycle
+  // --------------------------------------------------
+
+  initialize() {
+    if (this.running) {
+      console.warn("[World] Already initialized");
+      return;
+    }
+
+    console.log("[World] Initializing...");
+
+    this.running = true;
+
+    SystemManager.add(new InputSystem());
+    SystemManager.add(new PhysicsSystem());
+    SystemManager.add(new TransformSystem());
+    SystemManager.add(new RenderSystem());
+
+    SystemManager.initialize(this);
+
+    console.log("[World] Initialized");
+  }
+
+  destroy() {
+    console.log("[World] Destroying...");
+
+    SystemManager.destroy();
+
+    EntityManager.clear();
+
+    this.sceneGraph.clear();
+
+    useEngineStore.getState().setEntities([]);
+
+    this.running = false;
+    this.paused = false;
+
+    console.log("[World] Destroyed");
+  }
+
+  // --------------------------------------------------
+  // Entity
+  // --------------------------------------------------
+
+  spawn(entity) {
+    if (!entity) {
+      console.error("[World] Cannot spawn null entity");
+      return null;
+    }
+
+    if (!entity.uuid) {
+      console.error("[World] Entity has no UUID:", entity);
+      return null;
+    }
+
+    if (EntityManager.getByUUID(entity.uuid)) {
+      console.warn("[World] Entity already exists:", entity.name);
+      return entity;
+    }
+
+    console.log("[World] Spawning:", {
+      id: entity.id,
+      uuid: entity.uuid,
+      name: entity.name,
+      type: entity.type,
+    });
+
+    EntityManager.add(entity);
+
+    this.sceneGraph.add(entity);
+
+    const object = entity.getObject();
+
+    if (object) {
+      SceneService.add(object);
+    }
+
+    useEngineStore.getState().addEntity(entity);
+
+    EventBus.emit(EngineEvents.ENTITY_CREATED, entity);
+
+    return entity;
+  }
+
+  despawn(entity) {
+    if (!entity) {
+      return;
+    }
+
+    console.log("[World] Despawning:", entity.name);
+
+    const object = entity.getObject();
+
+    if (object) {
+      SceneService.remove(object);
+    }
+
+    entity.destroy();
+
+    EntityManager.remove(entity);
+
+    this.sceneGraph.remove(entity);
+
+    useEngineStore.getState().removeEntity(entity);
+
+    EventBus.emit(EngineEvents.ENTITY_DESTROYED, entity);
+  }
+
+  // --------------------------------------------------
+  // Compatibility
+  // --------------------------------------------------
+
+  add(entity) {
+    return this.spawn(entity);
+  }
+
+  remove(entity) {
+    return this.despawn(entity);
+  }
+
+  // --------------------------------------------------
+  // Update
+  // --------------------------------------------------
+
+  update(delta) {
+    if (!this.running || this.paused) {
+      return;
+    }
+
+    this.time.delta = delta;
+    this.time.elapsed += delta;
+    this.time.frame++;
+
+    SystemManager.update(delta);
+
+    this.sceneGraph.update(delta);
+  }
+
+  lateUpdate(delta) {
+    if (!this.running || this.paused) {
+      return;
+    }
+
+    SystemManager.lateUpdate(delta);
+
+    this.sceneGraph.lateUpdate(delta);
+  }
+
+  fixedUpdate(delta) {
+    if (!this.running || this.paused) {
+      return;
+    }
+
+    SystemManager.fixedUpdate(delta);
+
+    this.sceneGraph.fixedUpdate(delta);
+  }
+
+  // --------------------------------------------------
+  // Controls
+  // --------------------------------------------------
+
+  pause() {
+    this.paused = true;
+  }
+
+  resume() {
+    this.paused = false;
+  }
+
+  // --------------------------------------------------
+  // Getters
+  // --------------------------------------------------
+
+  getTime() {
+    return this.time;
+  }
+}
+
+export default new World();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\world\WorldManager.jsx
+==============================
+
+import WorldProvider from "./WorldProvider";
+
+import { LightingManager } from "../lighting";
+import { EnvironmentManager } from "../environment";
+import CityGenerator from "../city/generators/CityGenerator";
+
+export default function WorldManager() {
+  return (
+    <>
+      <WorldProvider />
+
+      <color attach="background" args={["#87CEEB"]} />
+
+      <LightingManager />
+
+      <EnvironmentManager />
+
+      <CityGenerator />
+    </>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\world\WorldProvider.jsx
+==============================
+
+import { useEffect } from "react";
+
+import World from "./World";
+
+export default function WorldProvider() {
+  useEffect(() => {
+    World.initialize();
+
+    return () => {
+      World.destroy();
+    };
+  }, []);
+
+  return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\buildings\Buildings.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\buildings\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\interactions\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\interactions\Interactable.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\interactions\InteractionManager.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\npc\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\npc\NPC.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\player\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\player\Player.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\stores\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\stores\Store.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\stores\StoreManager.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\ui\GameUI.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\ui\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\ui\KeyboardDebugger.jsx
+==============================
+
+import useEngineStore from "../../store/engineStore";
+
+export default function KeyboardDebugger() {
+  const keyboard = useEngineStore((state) => state.keyboard);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+
+        bottom: 10,
+        left: 10,
+
+        color: "white",
+        background: "rgba(0,0,0,.6)",
+
+        padding: 10,
+
+        fontFamily: "monospace",
+        fontSize: 12,
+
+        borderRadius: 4,
+
+        zIndex: 9999,
+
+        pointerEvents: "none",
+      }}
+    >
+      <pre
+        style={{
+          margin: 0,
+        }}
+      >
+        {JSON.stringify(keyboard, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\vehicles\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\game\vehicles\Vehicles.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\hooks\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\pages\Home.jsx
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\pages\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\store\engineStore.js
+==============================
+
+import { create } from "zustand";
+import CameraModes from "../engine/camera/CameraModes";
+
+const useEngineStore = create((set) => ({
+
+    //-----------------------------------
+    // Keyboard
+    //-----------------------------------
+
+    keyboard: {},
+
+    setKeyboard: (keyboard) =>
+        set({ keyboard }),
+
+    //-----------------------------------
+    // Mouse
+    //-----------------------------------
+
+    mouse: {
+
+        x: 0,
+        y: 0,
+
+        deltaX: 0,
+        deltaY: 0,
+
+        left: false,
+        middle: false,
+        right: false,
+
+        wheel: 0,
+
+        locked: false,
+
+    },
+
+    setMouse: (mouse) =>
+        set({ mouse }),
+
+    consumeMouseMotion: () =>
+        set((state) => ({
+            mouse: {
+                ...state.mouse,
+                deltaX: 0,
+                deltaY: 0,
+                wheel: 0,
+            },
+        })),
+
+    //-----------------------------------
+    // Performance
+    //-----------------------------------
+
+    fps: 0,
+
+    setFPS: (fps) =>
+        set({ fps }),
+
+    //-----------------------------------
+    // Graphics
+    //-----------------------------------
+
+    quality: "High",
+
+    setQuality: (quality) =>
+        set({ quality }),
+
+    //-----------------------------------
+    // Editor
+    //-----------------------------------
+
+    editor: {
+
+        enabled: true,
+
+        mode: CameraModes.EDITOR,
+
+        cameraSpeed: 0.15,
+
+        mouseSensitivity: 0.002,
+
+        showGrid: true,
+
+        showAxes: true,
+
+        selectedEntity: null,
+
+        hoveredEntity: null,
+
+        multiSelection: []
+
+    },
+
+    setEditor: (editor) =>
+        set((state) => ({
+
+            editor: {
+
+                ...state.editor,
+
+                ...editor
+
+            }
+
+        })),
+
+    setSelectedEntity: (entity) =>
+        set((state) => ({
+
+            editor: {
+
+                ...state.editor,
+
+                selectedEntity: entity
+
+            }
+
+        })),
+
+    setHoveredEntity: (entity) =>
+        set((state) => ({
+
+            editor: {
+
+                ...state.editor,
+
+                hoveredEntity: entity
+
+            }
+
+        })),
+
+    clearSelection: () =>
+        set((state) => ({
+
+            editor: {
+
+                ...state.editor,
+
+                selectedEntity: null,
+
+                hoveredEntity: null,
+
+                multiSelection: []
+
+            }
+
+        })),
+
+    //-----------------------------------
+    // Entities
+    //-----------------------------------
+
+    entities: [],
+
+    setEntities: (entities) =>
+        set({
+
+            entities
+
+        }),
+
+    addEntity: (entity) =>
+        set((state) => ({
+
+            entities: [
+
+                ...state.entities,
+
+                entity
+
+            ]
+
+        })),
+
+    removeEntity: (entity) =>
+        set((state) => ({
+
+            entities: state.entities.filter(
+
+                e => e !== entity
+
+            )
+
+        }))
+
+}));
+
+export default useEngineStore;
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\store\index.js
+==============================
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\utils\index.js
+==============================
+
