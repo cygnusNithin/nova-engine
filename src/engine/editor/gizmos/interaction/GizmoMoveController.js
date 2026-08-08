@@ -5,9 +5,7 @@ import EditorTransform from "../../transform/EditorTransform";
 class GizmoMoveController {
   constructor() {
     this.startPosition = new THREE.Vector3();
-
     this.lastDelta = new THREE.Vector3();
-
     this.initialized = false;
   }
 
@@ -16,12 +14,8 @@ class GizmoMoveController {
   // ============================================================
 
   reset() {
-    console.log("[GizmoMoveController] RESET");
-
     this.startPosition.set(0, 0, 0);
-
     this.lastDelta.set(0, 0, 0);
-
     this.initialized = false;
   }
 
@@ -32,18 +26,23 @@ class GizmoMoveController {
   move(entity, axis, delta) {
     if (!entity) {
       console.warn("[GizmoMoveController] Missing entity");
-      return;
+      return false;
     }
 
     if (!entity.transform) {
       console.warn("[GizmoMoveController] Entity has no transform", entity);
-      return;
+
+      return false;
     }
 
     if (!delta) {
       console.warn("[GizmoMoveController] Missing delta");
-      return;
+      return false;
     }
+
+    // ----------------------------------------------------------
+    // Capture the entity position ONCE at drag start.
+    // ----------------------------------------------------------
 
     if (!this.initialized) {
       this.startPosition.copy(entity.transform.position);
@@ -56,24 +55,31 @@ class GizmoMoveController {
       );
     }
 
+    // ----------------------------------------------------------
+    // Convert the pointer delta into movement constrained
+    // to the selected axis / plane.
+    // ----------------------------------------------------------
+
     const movement = this.getAxisMovement(axis, delta);
 
     if (!movement) {
       console.warn("[GizmoMoveController] Invalid axis:", axis);
 
-      return;
+      return false;
     }
 
-    const nextPosition = this.startPosition.clone().add(movement);
+    // ----------------------------------------------------------
+    // IMPORTANT:
+    //
+    // Delta is measured FROM DRAG START.
+    //
+    // Therefore the next position must also be calculated
+    // FROM DRAG START.
+    //
+    // DO NOT add movement to the current entity position.
+    // ----------------------------------------------------------
 
-    console.log("[GizmoMoveController] MOVE", {
-      entity: entity.name,
-      axis,
-      delta: delta.clone(),
-      movement: movement.clone(),
-      start: this.startPosition.clone(),
-      next: nextPosition.clone(),
-    });
+    const nextPosition = this.startPosition.clone().add(movement);
 
     EditorTransform.setEntityPosition(
       entity,
@@ -83,10 +89,12 @@ class GizmoMoveController {
     );
 
     this.lastDelta.copy(movement);
+
+    return true;
   }
 
   // ============================================================
-  // AXIS MOVEMENT
+  // AXIS / PLANE MOVEMENT
   // ============================================================
 
   getAxisMovement(axis, delta) {
