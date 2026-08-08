@@ -6,14 +6,60 @@ import GizmoRaycaster from "./GizmoRaycaster";
 import GizmoDragPlane from "./GizmoDragPlane";
 import GizmoDragController from "./GizmoDragController";
 import GizmoMoveController from "./GizmoMoveController";
+import GizmoRotateController from "./GizmoRotateController";
 
 export default function GizmoInteraction() {
   const { camera, pointer } = useThree();
 
   useFrame(() => {
-    // ------------------------------------------------------------
-    // Not dragging
-    // ------------------------------------------------------------
+    // ============================================================
+    // ROTATION
+    // ============================================================
+
+    if (GizmoRotateController.isRotating()) {
+      const entity = GizmoState.entity;
+
+      if (!entity) {
+        GizmoRotateController.cancel(entity);
+        return;
+      }
+
+      const axis = GizmoState.axis;
+
+      if (!axis) {
+        return;
+      }
+
+      const origin = GizmoState.rotationOrigin;
+
+      if (!origin) {
+        return;
+      }
+
+      const rotationPlane = GizmoState.rotationPlane;
+
+      if (!rotationPlane) {
+        return;
+      }
+
+      const point = GizmoRaycaster.intersectPlane(
+        camera,
+        pointer,
+        rotationPlane,
+      );
+
+      if (!point) {
+        return;
+      }
+
+      GizmoRotateController.update(entity, axis, point, origin);
+
+      return;
+    }
+
+    // ============================================================
+    // MOVE
+    // ============================================================
 
     if (!GizmoDragController.isDragging()) {
       return;
@@ -26,7 +72,7 @@ export default function GizmoInteraction() {
     const plane = GizmoDragPlane.get();
 
     if (!plane) {
-      console.warn("GIZMO INTERACTION: No drag plane");
+      console.warn("[GizmoInteraction] No drag plane");
 
       return;
     }
@@ -59,8 +105,11 @@ export default function GizmoInteraction() {
     // ------------------------------------------------------------
 
     console.log("========== MOVE ==========");
+
     console.log("Entity:", GizmoState.entity);
+
     console.log("Axis:", GizmoState.axis);
+
     console.log("Delta:", delta);
 
     GizmoMoveController.move(GizmoState.entity, GizmoState.axis, delta);

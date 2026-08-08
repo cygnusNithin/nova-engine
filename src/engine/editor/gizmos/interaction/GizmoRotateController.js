@@ -1,59 +1,266 @@
 import * as THREE from "three";
 
+import EditorTransform from "../../transform/EditorTransform";
+
 class GizmoRotateController {
   constructor() {
+    this.entity = null;
+
+    this.axis = null;
+
+    this.rotating = false;
+
     this.startRotation = new THREE.Euler();
 
-    this.lastRotation = new THREE.Euler();
+    this.startVector = new THREE.Vector3();
+
+    this.currentVector = new THREE.Vector3();
+
+    this.rotationPlane = new THREE.Plane();
+
+    this.rotationCenter = new THREE.Vector3();
 
     this.initialized = false;
   }
+
+  // ============================================================
+  // RESET
+  // ============================================================
 
   reset() {
+    this.entity = null;
+
+    this.axis = null;
+
+    this.rotating = false;
+
     this.startRotation.set(0, 0, 0);
 
-    this.lastRotation.set(0, 0, 0);
+    this.startVector.set(0, 0, 0);
+
+    this.currentVector.set(0, 0, 0);
+
+    this.rotationPlane.set(new THREE.Vector3(0, 1, 0), 0);
+
+    this.rotationCenter.set(0, 0, 0);
 
     this.initialized = false;
   }
 
-  rotate(entity, axis, angle) {
-    if (!entity) return;
+  // ============================================================
+  // BEGIN ROTATION
+  // ============================================================
 
-    if (!Number.isFinite(angle)) return;
+  begin(entity, axis, startPoint, center) {
+    if (!entity) {
+      console.warn("[GizmoRotateController] Missing entity");
+
+      return false;
+    }
+
+    if (!entity.transform) {
+      console.warn("[GizmoRotateController] Entity has no transform", entity);
+
+      return false;
+    }
+
+    if (!startPoint || !center) {
+      console.warn("[GizmoRotateController] Missing rotation geometry");
+
+      return false;
+    }
+
+    if (axis !== "x" && axis !== "y" && axis !== "z") {
+      console.warn("[GizmoRotateController] Invalid axis:", axis);
+
+      return false;
+    }
+
+    this.entity = entity;
+
+    this.axis = axis;
+
+    this.rotating = true;
+
+    this.rotationCenter.copy(center);
+
+    this.startRotation.copy(entity.transform.rotation);
+
+    this.startVector.copy(startPoint).sub(center).normalize();
+
+    this.currentVector.copy(this.startVector);
+
+    this.initialized = true;
+
+    console.log("[GizmoRotateController] Rotation started", {
+      entity: entity.name,
+      axis,
+      startRotation: this.startRotation,
+    });
+
+    return true;
+  }
+
+  // ============================================================
+  // UPDATE ROTATION
+  // ============================================================
+
+  update(entity, axis, currentPoint) {
+    if (!this.rotating) {
+      return false;
+    }
 
     if (!this.initialized) {
-      this.startRotation.copy(entity.transform.rotation);
+      return false;
+    }
 
-      this.initialized = true;
+    if (!entity || entity !== this.entity) {
+      return false;
+    }
+
+    if (axis !== this.axis) {
+      return false;
+    }
+
+    if (!currentPoint) {
+      return false;
+    }
+
+    this.currentVector.copy(currentPoint).sub(this.rotationCenter).normalize();
+
+    if (
+      this.startVector.lengthSq() === 0 ||
+      this.currentVector.lengthSq() === 0
+    ) {
+      return false;
+    }
+
+    const angle = this.getSignedAngle(
+      this.startVector,
+      this.currentVector,
+      axis,
+    );
+
+    if (!Number.isFinite(angle)) {
+      return false;
     }
 
     const rotation = this.startRotation.clone();
 
     switch (axis) {
       case "x":
-        rotation.x += angle;
+        rotation.x = this.startRotation.x + angle;
         break;
 
       case "y":
-        rotation.y += angle;
+        rotation.y = this.startRotation.y + angle;
         break;
 
       case "z":
-        rotation.z += angle;
+        rotation.z = this.startRotation.z + angle;
         break;
 
       default:
-        return;
+        return false;
     }
 
-    entity.transform.setRotation(rotation.x, rotation.y, rotation.z);
+    EditorTransform.setEntityRotation(
+      entity,
+      rotation.x,
+      rotation.y,
+      rotation.z,
+    );
 
-    this.lastRotation.copy(rotation);
+    return true;
   }
 
-  getRotation() {
-    return this.lastRotation.clone();
+  // ============================================================
+  // SIGNED ANGLE
+  // ============================================================
+
+  getSignedAngle(from, to, axis) {
+    const cross = new THREE.Vector3();
+
+    cross.crossVectors(from, to);
+
+    const dot = THREE.MathUtils.clamp(from.dot(to), -1, 1);
+
+    const angle = Math.acos(dot);
+
+    switch (axis) {
+      case "x":
+        return angle * (Math.sign(cross.x) || 1);
+
+      case "y":
+        return angle * (Math.sign(cross.y) || 1);
+
+      case "z":
+        return angle * (Math.sign(cross.z) || 1);
+
+      default:
+        return 0;
+    }
+  }
+
+  // ============================================================
+  // END
+  // ============================================================
+
+  end() {
+    if (!this.rotating) {
+      return;
+    }
+
+    console.log("[GizmoRotateController] Rotation ended");
+
+    this.reset();
+  }
+
+  // ============================================================
+  // CANCEL
+  // ============================================================
+
+  cancel() {
+    if (!this.rotating) {
+      return;
+    }
+
+    if (this.entity) {
+      EditorTransform.setEntityRotation(
+        this.entity,
+        this.startRotation.x,
+        this.startRotation.y,
+        this.startRotation.z,
+      );
+    }
+
+    console.log("[GizmoRotateController] Rotation cancelled");
+
+    this.reset();
+  }
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  isRotating() {
+    return this.rotating;
+  }
+
+  getAxis() {
+    return this.axis;
+  }
+
+  getEntity() {
+    return this.entity;
+  }
+
+  getRotationCenter() {
+    return this.rotationCenter.clone();
+  }
+
+  getRotationPlane() {
+    return this.rotationPlane;
   }
 }
 
