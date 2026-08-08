@@ -8,6 +8,13 @@ class GizmoDragController {
     this.startPoint = new THREE.Vector3();
     this.currentPoint = new THREE.Vector3();
     this.delta = new THREE.Vector3();
+
+    // ------------------------------------------------------------
+    // Transform snapshot
+    // ------------------------------------------------------------
+
+    this.originalPosition = new THREE.Vector3();
+    this.hasTransformSnapshot = false;
   }
 
   // ============================================================
@@ -26,13 +33,30 @@ class GizmoDragController {
       return false;
     }
 
-    if (!GizmoState.entity) {
+    const entity = GizmoState.entity;
+
+    if (!entity) {
+      return false;
+    }
+
+    if (!entity.transform) {
       return false;
     }
 
     if (!plane || !startPoint) {
       return false;
     }
+
+    // ----------------------------------------------------------
+    // Capture transform BEFORE any movement happens
+    // ----------------------------------------------------------
+
+    this.originalPosition.copy(entity.transform.position);
+    this.hasTransformSnapshot = true;
+
+    // ----------------------------------------------------------
+    // Gizmo state
+    // ----------------------------------------------------------
 
     GizmoState.axis = axis;
     GizmoState.dragOrigin = origin?.clone() ?? new THREE.Vector3();
@@ -41,6 +65,10 @@ class GizmoDragController {
     GizmoState.pointerId = pointerId;
     GizmoState.pointerTarget = pointerTarget;
     GizmoState.dragging = true;
+
+    // ----------------------------------------------------------
+    // Internal drag state
+    // ----------------------------------------------------------
 
     this.startPoint.copy(startPoint);
     this.currentPoint.copy(startPoint);
@@ -82,7 +110,7 @@ class GizmoDragController {
   }
 
   // ============================================================
-  // END
+  // END / COMMIT
   // ============================================================
 
   end(pointerId = null) {
@@ -100,7 +128,16 @@ class GizmoDragController {
 
     this.releasePointerCapture();
 
+    // ----------------------------------------------------------
+    // Commit current transform.
+    //
+    // We intentionally do NOT restore anything here.
+    // The current entity transform becomes the committed state.
+    // ----------------------------------------------------------
+
     GizmoMoveController.reset();
+
+    this.clearTransformSnapshot();
 
     this.resetState();
 
@@ -108,7 +145,7 @@ class GizmoDragController {
   }
 
   // ============================================================
-  // CANCEL
+  // CANCEL / RESTORE
   // ============================================================
 
   cancel(pointerId = null) {
@@ -126,7 +163,23 @@ class GizmoDragController {
 
     this.releasePointerCapture();
 
+    // ----------------------------------------------------------
+    // Restore the entity to its state before the drag began.
+    // ----------------------------------------------------------
+
+    const entity = GizmoState.entity;
+
+    if (entity && entity.transform && this.hasTransformSnapshot) {
+      entity.transform.setPosition(
+        this.originalPosition.x,
+        this.originalPosition.y,
+        this.originalPosition.z,
+      );
+    }
+
     GizmoMoveController.reset();
+
+    this.clearTransformSnapshot();
 
     this.resetState();
 
@@ -155,6 +208,15 @@ class GizmoDragController {
     } catch {
       // Pointer may already have been released.
     }
+  }
+
+  // ============================================================
+  // TRANSFORM SNAPSHOT
+  // ============================================================
+
+  clearTransformSnapshot() {
+    this.originalPosition.set(0, 0, 0);
+    this.hasTransformSnapshot = false;
   }
 
   // ============================================================
