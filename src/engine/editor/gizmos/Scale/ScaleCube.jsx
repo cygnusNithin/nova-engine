@@ -2,14 +2,19 @@ import { Box } from "@react-three/drei";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
 
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
+
 export default function ScaleCube({
   axis,
   color,
   position,
+  highlighted,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -24,13 +29,13 @@ export default function ScaleCube({
 
   return (
     <Box
-      args={[0.15, 0.15, 0.15]}
+      args={[0.18, 0.18, 0.18]}
       position={position}
       onPointerDown={handlePointerDown}
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}
     >
-      <primitive object={GizmoMaterial.get(color)} attach="material" />
+      <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
     </Box>
   );
 }

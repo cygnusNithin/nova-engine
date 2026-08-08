@@ -1,3 +1,5 @@
+import useEngineStore from "../../../store/engineStore";
+
 import GizmoState from "./GizmoState";
 
 class GizmoController {
@@ -6,14 +8,37 @@ class GizmoController {
   // ============================================================
 
   select(entity) {
+    /*
+     * Never allow the active transform to switch entities.
+     */
+    if (
+      GizmoState.transforming &&
+      GizmoState.entity &&
+      entity !== GizmoState.entity
+    ) {
+      return false;
+    }
+
     GizmoState.entity = entity;
+
+    return true;
   }
 
   clear() {
+    /*
+     * Never clear the selected entity in the middle of
+     * a transform operation.
+     */
+    if (GizmoState.transforming) {
+      return false;
+    }
+
     GizmoState.entity = null;
     GizmoState.axis = null;
     GizmoState.hoveredAxis = null;
     GizmoState.dragging = false;
+
+    return true;
   }
 
   getSelectedEntity() {
@@ -25,7 +50,24 @@ class GizmoController {
   // ============================================================
 
   setMode(mode) {
+    /*
+     * W / E / R are tool selectors.
+     *
+     * They cannot switch tools while an actual transform
+     * is being performed.
+     */
+    if (GizmoState.transforming) {
+      return false;
+    }
+
     GizmoState.mode = mode;
+    GizmoState.hoveredAxis = null;
+
+    useEngineStore.getState().setEditor({
+      gizmoMode: mode,
+    });
+
+    return true;
   }
 
   getMode() {
@@ -37,7 +79,7 @@ class GizmoController {
   // ============================================================
 
   setHovered(axis) {
-    if (GizmoState.dragging) {
+    if (GizmoState.transforming) {
       return;
     }
 
@@ -45,11 +87,36 @@ class GizmoController {
   }
 
   clearHover() {
+    if (GizmoState.transforming) {
+      return;
+    }
+
     GizmoState.hoveredAxis = null;
   }
 
   getHoveredAxis() {
     return GizmoState.hoveredAxis;
+  }
+
+  // ============================================================
+  // TRANSFORM
+  // ============================================================
+
+  beginTransform() {
+    GizmoState.transforming = true;
+
+    return true;
+  }
+
+  endTransform() {
+    GizmoState.transforming = false;
+    GizmoState.axis = null;
+    GizmoState.dragging = false;
+    GizmoState.hoveredAxis = null;
+  }
+
+  isTransforming() {
+    return GizmoState.transforming;
   }
 
   // ============================================================

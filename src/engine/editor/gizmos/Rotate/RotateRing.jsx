@@ -2,42 +2,40 @@ import { Torus } from "@react-three/drei";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
 
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
+
 export default function RotateRing({
   axis,
   color,
   rotation,
+  highlighted,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
-  const handlePointerDown = (event) => {
-    event.stopPropagation();
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
 
+  const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
 
   const handlePointerOver = (event) => {
-    event.stopPropagation();
-
     onPointerOver?.(event, axis);
   };
 
   const handlePointerOut = (event) => {
-    event.stopPropagation();
-
-    onPointerOut?.(event);
+    onPointerOut?.(event, axis);
   };
 
   return (
     <Torus
-      args={[1.25, 0.025, 16, 96]}
+      args={[1.2, 0.025, 12, 64]}
       rotation={rotation}
-      renderOrder={1000}
       onPointerDown={handlePointerDown}
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}
     >
-      <primitive object={GizmoMaterial.get(color)} attach="material" />
+      <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
     </Torus>
   );
 }

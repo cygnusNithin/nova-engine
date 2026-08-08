@@ -1,53 +1,77 @@
 import * as THREE from "three";
 
 const direction = new THREE.Vector3();
+
 const forward = new THREE.Vector3();
+
 const right = new THREE.Vector3();
 
-export function updateCameraMovement(
-    camera,
-    keyboard,
-    speed,
-    delta
-) {
+export function updateCameraMovement(camera, keyboard, mouse, speed, delta) {
+  /*
+   * Unity / Unreal style:
+   *
+   * WASD camera movement belongs to camera/fly mode.
+   *
+   * We only activate it while RMB is held.
+   *
+   * Therefore:
+   *
+   * W
+   * E
+   * R
+   *
+   * can safely be editor tool shortcuts.
+   */
 
-    direction.set(0,0,0);
+  if (!mouse?.right) {
+    return;
+  }
 
-    camera.getWorldDirection(forward);
+  direction.set(0, 0, 0);
 
-    forward.y = 0;
+  camera.getWorldDirection(forward);
 
-    forward.normalize();
+  forward.y = 0;
 
-    right.crossVectors(
-        forward,
-        camera.up
-    ).normalize();
+  forward.normalize();
 
-    if (keyboard.KeyW)
-        direction.add(forward);
+  right.crossVectors(forward, camera.up).normalize();
 
-    if (keyboard.KeyS)
-        direction.sub(forward);
+  if (keyboard.KeyW) {
+    direction.add(forward);
+  }
 
-    if (keyboard.KeyA)
-        direction.sub(right);
+  if (keyboard.KeyS) {
+    direction.sub(forward);
+  }
 
-    if (keyboard.KeyD)
-        direction.add(right);
+  if (keyboard.KeyA) {
+    direction.sub(right);
+  }
 
-    if (keyboard.Space)
-        direction.y += 1;
+  if (keyboard.KeyD) {
+    direction.add(right);
+  }
 
-    if (keyboard.ControlLeft)
-        direction.y -= 1;
+  /*
+   * Unity-style fly vertical movement.
+   *
+   * Q = down
+   * E = up
+   *
+   * Only while RMB is held.
+   */
+  if (keyboard.KeyQ) {
+    direction.y -= 1;
+  }
 
-    if (direction.lengthSq() > 0)
-        direction.normalize();
+  if (keyboard.KeyE) {
+    direction.y += 1;
+  }
 
-    camera.position.addScaledVector(
-        direction,
-        speed * delta * 60
-    );
+  if (direction.lengthSq() > 0) {
+    direction.normalize();
+  }
 
+  camera.position.addScaledVector(direction, speed * delta * 60);
 }

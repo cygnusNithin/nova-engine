@@ -4,21 +4,20 @@ import * as THREE from "three";
 import MoveArrow from "./MoveArrow";
 import GizmoMaterial from "../shared/GizmoMaterial";
 
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
+
 export default function MoveAxis({
   axis,
-
   color,
-
   rotation,
-
   arrowPosition,
-
+  highlighted,
   onPointerDown,
-
   onPointerOver,
-
   onPointerOut,
 }) {
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -41,6 +40,7 @@ export default function MoveAxis({
         onPointerOut={handlePointerOut}
       >
         <cylinderGeometry args={[0.1, 0.1, 1.05, 8]} />
+
         <meshBasicMaterial
           transparent
           opacity={0}
@@ -57,11 +57,11 @@ export default function MoveAxis({
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <primitive object={GizmoMaterial.get(color)} attach="material" />
+        <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Cylinder>
 
       <MoveArrow
-        color={color}
+        color={displayColor}
         position={arrowPosition}
         axis={axis}
         onPointerDown={handlePointerDown}

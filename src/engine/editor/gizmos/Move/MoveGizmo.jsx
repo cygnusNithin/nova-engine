@@ -7,7 +7,9 @@ import MovePlane from "./MovePlane";
 import { GIZMO_COLORS, GIZMO_AXIS } from "../shared/GizmoConstants";
 
 const planeInnerOffset = 0.08;
+
 const visualPlaneSize = 0.32;
+
 const hitPlaneSize = 0.42;
 
 const visualPlaneCenter = planeInnerOffset + visualPlaneSize / 2;
@@ -16,6 +18,9 @@ const hitPlaneCenter = planeInnerOffset + hitPlaneSize / 2;
 
 export default function MoveGizmo({
   entity,
+  hoveredAxis,
+  activeAxis,
+  isHighlighted,
   onPointerDown,
   onPointerOver,
   onPointerOut,
@@ -32,11 +37,10 @@ export default function MoveGizmo({
 
   return (
     <group ref={group} name="MoveGizmo" scale={[2.5, 2.5, 2.5]}>
-      {/* X AXIS */}
-
       <MoveAxis
         axis={GIZMO_AXIS.X}
         color={GIZMO_COLORS.X}
+        highlighted={isHighlighted(GIZMO_AXIS.X)}
         rotation={[0, 0, -Math.PI / 2]}
         arrowPosition={[0, 0.9, 0]}
         onPointerDown={onPointerDown}
@@ -44,11 +48,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* Y AXIS */}
-
       <MoveAxis
         axis={GIZMO_AXIS.Y}
         color={GIZMO_COLORS.Y}
+        highlighted={isHighlighted(GIZMO_AXIS.Y)}
         rotation={[0, 0, 0]}
         arrowPosition={[0, 0.9, 0]}
         onPointerDown={onPointerDown}
@@ -56,11 +59,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* Z AXIS */}
-
       <MoveAxis
         axis={GIZMO_AXIS.Z}
         color={GIZMO_COLORS.Z}
+        highlighted={isHighlighted(GIZMO_AXIS.Z)}
         rotation={[Math.PI / 2, 0, 0]}
         arrowPosition={[0, 0.9, 0]}
         onPointerDown={onPointerDown}
@@ -68,11 +70,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* XY PLANE */}
-
       <MovePlane
         axis={GIZMO_AXIS.XY}
         color={GIZMO_COLORS.X}
+        highlighted={isHighlighted(GIZMO_AXIS.XY)}
         visualSize={visualPlaneSize}
         hitSize={hitPlaneSize}
         visualPosition={[visualPlaneCenter, visualPlaneCenter, 0]}
@@ -82,11 +83,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* XZ PLANE */}
-
       <MovePlane
         axis={GIZMO_AXIS.XZ}
         color={GIZMO_COLORS.Y}
+        highlighted={isHighlighted(GIZMO_AXIS.XZ)}
         rotation={[Math.PI / 2, 0, 0]}
         visualSize={visualPlaneSize}
         hitSize={hitPlaneSize}
@@ -97,11 +97,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* YZ PLANE */}
-
       <MovePlane
         axis={GIZMO_AXIS.YZ}
         color={GIZMO_COLORS.Z}
+        highlighted={isHighlighted(GIZMO_AXIS.YZ)}
         rotation={[0, Math.PI / 2, 0]}
         visualSize={visualPlaneSize}
         hitSize={hitPlaneSize}

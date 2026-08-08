@@ -3,7 +3,8 @@ import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
 import EditorSelection from "./EditorSelection";
-import GizmoDragController from "../gizmos/interaction/GizmoDragController";
+
+import GizmoController from "../gizmos/GizmoController";
 
 import EntityManager from "../../entity/EntityManager";
 
@@ -24,6 +25,14 @@ export default function EditorRaycaster() {
       }
 
       // ============================================================
+      // TRANSFORM LOCK
+      // ============================================================
+
+      if (GizmoController.isTransforming()) {
+        return;
+      }
+
+      // ============================================================
       // IGNORE NOVA EDITOR UI
       // ============================================================
 
@@ -33,14 +42,6 @@ export default function EditorRaycaster() {
         target instanceof Element &&
         target.closest("[data-nova-editor='true']")
       ) {
-        return;
-      }
-
-      // ============================================================
-      // IGNORE GIZMO DRAG
-      // ============================================================
-
-      if (GizmoDragController.isDragging()) {
         return;
       }
 
@@ -90,10 +91,6 @@ export default function EditorRaycaster() {
 
       const intersects = raycaster.current.intersectObjects(meshes, false);
 
-      // ============================================================
-      // FILTER INVALID HITS
-      // ============================================================
-
       const hits = intersects.filter((hit) => {
         const object = hit.object;
 
@@ -113,88 +110,32 @@ export default function EditorRaycaster() {
       });
 
       // ============================================================
-      // DEBUG
-      // ============================================================
-
-      console.group("========== RAYCAST ==========");
-
-      console.log("Hits:", hits.length);
-
-      // ============================================================
       // NOTHING HIT
       // ============================================================
 
       if (!hits.length) {
-        console.log("Nothing hit");
-
-        console.groupEnd();
-
         EditorSelection.clearSelection();
 
         return;
       }
 
       // ============================================================
-      // LOG ALL HITS
-      // ============================================================
-
-      hits.forEach((hit, index) => {
-        console.log("-------------------------");
-
-        console.log("HIT", index);
-
-        console.log("Mesh UUID :", hit.object.uuid);
-
-        console.log("Mesh Name :", hit.object.name);
-
-        console.log("Mesh Type :", hit.object.type);
-
-        console.log("Distance  :", hit.distance);
-
-        console.log("UserData  :", hit.object.userData);
-      });
-
-      // ============================================================
-      // FIND ENTITY FROM HIT
+      // FIND ENTITY
       // ============================================================
 
       let selectedEntity = null;
       let selectedObject = null;
 
-      /*
-       * IMPORTANT:
-       *
-       * We check EVERY hit, not only hits[0].
-       *
-       * This matters because a visual mesh may be sitting above
-       * another selectable entity.
-       *
-       * The first hit that actually belongs to a Nova Entity
-       * becomes the selection.
-       */
-
       for (const hit of hits) {
         let object = hit.object;
 
-        // ----------------------------------------------------------
-        // Walk up the Three.js hierarchy
-        // ----------------------------------------------------------
-
         while (object) {
-          // --------------------------------------------------------
-          // Direct Entity reference
-          // --------------------------------------------------------
-
           if (object.userData?.entity) {
             selectedEntity = object.userData.entity;
             selectedObject = object;
 
             break;
           }
-
-          // --------------------------------------------------------
-          // Entity UUID reference
-          // --------------------------------------------------------
 
           if (object.userData?.entityUUID) {
             const entity = EntityManager.getByUUID(object.userData.entityUUID);
@@ -216,54 +157,21 @@ export default function EditorRaycaster() {
       }
 
       // ============================================================
-      // NO ENTITY FOUND
+      // NO ENTITY
       // ============================================================
 
       if (!selectedEntity) {
-        console.warn(
-          "Raycast hit a render object, but that object is not attached to a Nova Entity.",
-        );
-
-        console.warn(
-          "Selection requires userData.entity or userData.entityUUID.",
-        );
-
-        console.groupEnd();
-
         EditorSelection.clearSelection();
 
         return;
       }
 
       // ============================================================
-      // ENTITY FOUND
-      // ============================================================
-
-      console.log("");
-
-      console.log("FOUND ENTITY");
-
-      console.table({
-        id: selectedEntity.id,
-        uuid: selectedEntity.uuid,
-        name: selectedEntity.name,
-        type: selectedEntity.type,
-      });
-
-      console.log("Selected Render Object:", selectedObject);
-
-      console.groupEnd();
-
-      // ============================================================
-      // SELECT ENTITY
+      // SELECT
       // ============================================================
 
       EditorSelection.selectEntity(selectedEntity);
     }
-
-    // ================================================================
-    // WINDOW POINTER LISTENER
-    // ================================================================
 
     window.addEventListener("pointerdown", onPointerDown);
 

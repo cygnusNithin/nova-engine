@@ -1,64 +1,31 @@
 import * as THREE from "three";
 
 import EditorTransform from "../../transform/EditorTransform";
-
 import GizmoState from "../GizmoState";
 
-class GizmoRotateController {
+class GizmoScaleController {
   constructor() {
     this.entity = null;
 
     this.axis = null;
 
-    this.rotating = false;
+    this.scaling = false;
 
-    this.startRotation = new THREE.Euler();
+    this.startScale = new THREE.Vector3();
 
-    this.startVector = new THREE.Vector3();
+    this.currentPoint = new THREE.Vector3();
 
-    this.currentVector = new THREE.Vector3();
+    this.startPoint = new THREE.Vector3();
 
-    this.rotationPlane = new THREE.Plane();
+    this.scaleAxis = new THREE.Vector3();
 
-    this.rotationCenter = new THREE.Vector3();
-
-    this.pointerId = null;
-
-    this.pointerTarget = null;
-
-    this.initialized = false;
-  }
-
-  // ============================================================
-  // RESET
-  // ============================================================
-
-  reset() {
-    this.entity = null;
-
-    this.axis = null;
-
-    this.rotating = false;
-
-    this.startRotation.set(0, 0, 0);
-
-    this.startVector.set(0, 0, 0);
-
-    this.currentVector.set(0, 0, 0);
-
-    this.rotationPlane.set(new THREE.Vector3(0, 1, 0), 0);
-
-    this.rotationCenter.set(0, 0, 0);
+    this.screenAxis = new THREE.Vector3();
 
     this.pointerId = null;
 
     this.pointerTarget = null;
 
     this.initialized = false;
-
-    GizmoState.transforming = false;
-    GizmoState.axis = null;
-    GizmoState.hoveredAxis = null;
   }
 
   // ============================================================
@@ -69,28 +36,23 @@ class GizmoRotateController {
     entity,
     axis,
     startPoint,
-    center,
-    rotationPlane,
+    camera,
     pointerId = null,
     pointerTarget = null,
   ) {
-    if (!entity) {
+    if (!entity?.transform) {
       return false;
     }
 
-    if (!entity.transform) {
+    if (!startPoint || !camera) {
       return false;
     }
 
-    if (!startPoint || !center || !rotationPlane) {
+    if (axis !== "x" && axis !== "y" && axis !== "z" && axis !== "xyz") {
       return false;
     }
 
-    if (axis !== "x" && axis !== "y" && axis !== "z") {
-      return false;
-    }
-
-    if (this.rotating || GizmoState.transforming) {
+    if (this.scaling || GizmoState.transforming) {
       return false;
     }
 
@@ -98,21 +60,24 @@ class GizmoRotateController {
 
     this.axis = axis;
 
-    this.rotating = true;
+    this.scaling = true;
 
-    this.rotationCenter.copy(center);
+    this.startScale.copy(entity.transform.scale);
 
-    this.rotationPlane.copy(rotationPlane);
+    this.startPoint.copy(startPoint);
 
-    this.startRotation.copy(entity.transform.rotation);
-
-    this.startVector.copy(startPoint).sub(center).normalize();
-
-    this.currentVector.copy(this.startVector);
+    this.currentPoint.copy(startPoint);
 
     this.pointerId = pointerId;
 
     this.pointerTarget = pointerTarget;
+
+    this.screenAxis
+      .set(0, 1, 0)
+      .applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()))
+      .normalize();
+
+    this.scaleAxis.copy(this.getAxisVector(axis) ?? this.screenAxis);
 
     this.initialized = true;
 
@@ -127,11 +92,7 @@ class GizmoRotateController {
   // ============================================================
 
   update(entity, axis, currentPoint, pointerId = null) {
-    if (!this.rotating) {
-      return false;
-    }
-
-    if (!this.initialized) {
+    if (!this.scaling || !this.initialized) {
       return false;
     }
 
@@ -155,55 +116,55 @@ class GizmoRotateController {
       return false;
     }
 
-    this.currentVector.copy(currentPoint).sub(this.rotationCenter).normalize();
+    this.currentPoint.copy(currentPoint);
 
-    if (
-      this.startVector.lengthSq() < 1e-8 ||
-      this.currentVector.lengthSq() < 1e-8
-    ) {
-      return false;
-    }
-
-    const axisVector = this.getAxisVector(axis);
-
-    if (!axisVector) {
-      return false;
-    }
-
-    const angle = this.getSignedAngle(
-      this.startVector,
-      this.currentVector,
-      axisVector,
+    const delta = new THREE.Vector3().subVectors(
+      this.currentPoint,
+      this.startPoint,
     );
 
-    if (!Number.isFinite(angle)) {
-      return false;
+    let amount;
+
+    if (axis === "xyz") {
+      /*
+       * Uniform scale follows screen-space vertical movement.
+       */
+      amount = delta.dot(this.screenAxis);
+    } else {
+      /*
+       * Axis scale follows the selected world axis.
+       */
+      amount = delta.dot(this.scaleAxis);
     }
 
-    const rotation = this.startRotation.clone();
+    /*
+     * Keep the sensitivity deliberately conservative.
+     */
+    const factor = Math.max(0.01, 1 + amount);
 
-    switch (axis) {
-      case "x":
-        rotation.x = this.startRotation.x + angle;
-        break;
+    const nextScale = this.startScale.clone();
 
-      case "y":
-        rotation.y = this.startRotation.y + angle;
-        break;
+    if (axis === "xyz") {
+      nextScale.multiplyScalar(factor);
+    } else {
+      if (axis === "x") {
+        nextScale.x = Math.max(0.01, this.startScale.x * factor);
+      }
 
-      case "z":
-        rotation.z = this.startRotation.z + angle;
-        break;
+      if (axis === "y") {
+        nextScale.y = Math.max(0.01, this.startScale.y * factor);
+      }
 
-      default:
-        return false;
+      if (axis === "z") {
+        nextScale.z = Math.max(0.01, this.startScale.z * factor);
+      }
     }
 
-    EditorTransform.setEntityRotation(
+    EditorTransform.setEntityScale(
       entity,
-      rotation.x,
-      rotation.y,
-      rotation.z,
+      nextScale.x,
+      nextScale.y,
+      nextScale.z,
     );
 
     return true;
@@ -230,33 +191,11 @@ class GizmoRotateController {
   }
 
   // ============================================================
-  // SIGNED ANGLE
-  // ============================================================
-
-  getSignedAngle(from, to, axis) {
-    const cross = new THREE.Vector3().crossVectors(from, to);
-
-    const dot = THREE.MathUtils.clamp(from.dot(to), -1, 1);
-
-    /*
-     * atan2 gives us the full signed angle.
-     *
-     * This is better than:
-     *
-     * acos(dot) + Math.sign(...)
-     *
-     * because atan2 handles the sign and the 180-degree
-     * boundary much more reliably.
-     */
-    return Math.atan2(cross.dot(axis), dot);
-  }
-
-  // ============================================================
-  // END / COMMIT
+  // END
   // ============================================================
 
   end(pointerId = null) {
-    if (!this.rotating) {
+    if (!this.scaling) {
       return false;
     }
 
@@ -280,7 +219,7 @@ class GizmoRotateController {
   // ============================================================
 
   cancel(pointerId = null) {
-    if (!this.rotating) {
+    if (!this.scaling) {
       return false;
     }
 
@@ -295,17 +234,49 @@ class GizmoRotateController {
     this.releasePointerCapture();
 
     if (this.entity?.transform) {
-      EditorTransform.setEntityRotation(
+      EditorTransform.setEntityScale(
         this.entity,
-        this.startRotation.x,
-        this.startRotation.y,
-        this.startRotation.z,
+        this.startScale.x,
+        this.startScale.y,
+        this.startScale.z,
       );
     }
 
     this.reset();
 
     return true;
+  }
+
+  // ============================================================
+  // RESET
+  // ============================================================
+
+  reset() {
+    this.entity = null;
+
+    this.axis = null;
+
+    this.scaling = false;
+
+    this.startScale.set(1, 1, 1);
+
+    this.currentPoint.set(0, 0, 0);
+
+    this.startPoint.set(0, 0, 0);
+
+    this.scaleAxis.set(0, 0, 0);
+
+    this.screenAxis.set(0, 1, 0);
+
+    this.pointerId = null;
+
+    this.pointerTarget = null;
+
+    this.initialized = false;
+
+    GizmoState.transforming = false;
+    GizmoState.axis = null;
+    GizmoState.hoveredAxis = null;
   }
 
   // ============================================================
@@ -333,24 +304,12 @@ class GizmoRotateController {
   // STATE
   // ============================================================
 
-  isRotating() {
-    return this.rotating;
+  isScaling() {
+    return this.scaling;
   }
 
   getAxis() {
     return this.axis;
-  }
-
-  getEntity() {
-    return this.entity;
-  }
-
-  getRotationCenter() {
-    return this.rotationCenter.clone();
-  }
-
-  getRotationPlane() {
-    return this.rotationPlane;
   }
 
   getPointerId() {
@@ -358,4 +317,4 @@ class GizmoRotateController {
   }
 }
 
-export default new GizmoRotateController();
+export default new GizmoScaleController();

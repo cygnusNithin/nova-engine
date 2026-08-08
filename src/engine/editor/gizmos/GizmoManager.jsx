@@ -1,49 +1,53 @@
 import { useEffect, useState } from "react";
 import { useThree } from "@react-three/fiber";
+import * as THREE from "three";
 
 import useEngineStore from "../../../store/engineStore";
 
 import GizmoController from "./GizmoController";
-import GizmoModeController from "./GizmoModeController";
-import GizmoHoverController from "./interaction/GizmoHoverController";
 
-import GizmoInteraction from "./interaction/GizmoInteraction";
+import GizmoHoverController from "./interaction/GizmoHoverController";
 import GizmoDragController from "./interaction/GizmoDragController";
 import GizmoDragPlane from "./interaction/GizmoDragPlane";
 import GizmoRaycaster from "./interaction/GizmoRaycaster";
 import GizmoRotateController from "./interaction/GizmoRotateController";
+import GizmoScaleController from "./interaction/GizmoScaleController";
+import GizmoState from "./GizmoState";
+
+import GizmoInteraction from "./interaction/GizmoInteraction";
 
 import MoveGizmo from "./Move/MoveGizmo";
 import RotateGizmo from "./Rotate/RotateGizmo";
+import ScaleGizmo from "./Scale/ScaleGizmo";
+
+import { GIZMO_MODES } from "./shared/GizmoConstants";
 
 export default function GizmoManager() {
   const selectedEntity = useEngineStore((state) => state.editor.selectedEntity);
 
+  const gizmoMode = useEngineStore((state) => state.editor.gizmoMode);
+
   const { camera } = useThree();
 
-  const [mode, setMode] = useState(() => GizmoModeController.getMode());
+  const [hoveredAxis, setHoveredAxis] = useState(null);
+
+  const [activeAxis, setActiveAxis] = useState(null);
 
   // ============================================================
-  // SELECTION CHANGE
+  // SELECTION
   // ============================================================
 
   useEffect(() => {
-    console.log(
-      "[GizmoManager] Selection changed:",
-      selectedEntity?.name ?? null,
-    );
-
-    if (GizmoDragController.isDragging()) {
-      GizmoDragController.cancel();
-    }
-
-    if (GizmoRotateController.isRotating()) {
-      GizmoRotateController.cancel();
+    if (GizmoController.isTransforming()) {
+      return;
     }
 
     if (!selectedEntity) {
       GizmoController.clear();
+
       GizmoHoverController.clear();
+
+      setHoveredAxis(null);
 
       return;
     }
@@ -52,74 +56,59 @@ export default function GizmoManager() {
   }, [selectedEntity]);
 
   // ============================================================
-  // MODE SHORTCUTS
+  // MODE CHANGE
   // ============================================================
 
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      const target = event.target;
+    if (GizmoController.isTransforming()) {
+      return;
+    }
 
-      if (
-        target instanceof HTMLElement &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
+    GizmoController.setMode(gizmoMode);
 
-      const key = event.key.toLowerCase();
+    setHoveredAxis(null);
+    setActiveAxis(null);
+  }, [gizmoMode]);
 
-      // --------------------------------------------------------
-      // W = MOVE
-      // --------------------------------------------------------
+  // ============================================================
+  // END / CANCEL
+  // ============================================================
 
-      if (key === "w") {
-        if (GizmoDragController.isDragging()) {
-          GizmoDragController.cancel();
-        }
+  const endActiveTransform = (pointerId = null) => {
+    if (GizmoDragController.isDragging()) {
+      GizmoDragController.end(pointerId);
+    }
 
-        if (GizmoRotateController.isRotating()) {
-          GizmoRotateController.cancel();
-        }
+    if (GizmoRotateController.isRotating()) {
+      GizmoRotateController.end(pointerId);
+    }
 
-        GizmoModeController.move();
+    if (GizmoScaleController.isScaling()) {
+      GizmoScaleController.end(pointerId);
+    }
 
-        setMode(GizmoModeController.getMode());
+    setActiveAxis(null);
+    setHoveredAxis(null);
+    GizmoHoverController.clear();
+  };
 
-        console.log("[GizmoManager] Mode: MOVE");
+  const cancelActiveTransform = (pointerId = null) => {
+    if (GizmoDragController.isDragging()) {
+      GizmoDragController.cancel(pointerId);
+    }
 
-        return;
-      }
+    if (GizmoRotateController.isRotating()) {
+      GizmoRotateController.cancel(pointerId);
+    }
 
-      // --------------------------------------------------------
-      // E = ROTATE
-      // --------------------------------------------------------
+    if (GizmoScaleController.isScaling()) {
+      GizmoScaleController.cancel(pointerId);
+    }
 
-      if (key === "e") {
-        if (GizmoDragController.isDragging()) {
-          GizmoDragController.cancel();
-        }
-
-        if (GizmoRotateController.isRotating()) {
-          GizmoRotateController.cancel();
-        }
-
-        GizmoModeController.rotate();
-
-        setMode(GizmoModeController.getMode());
-
-        console.log("[GizmoManager] Mode: ROTATE");
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
+    setActiveAxis(null);
+    setHoveredAxis(null);
+    GizmoHoverController.clear();
+  };
 
   // ============================================================
   // GLOBAL POINTER EVENTS
@@ -127,37 +116,33 @@ export default function GizmoManager() {
 
   useEffect(() => {
     const handlePointerUp = (event) => {
-      if (GizmoDragController.isDragging()) {
-        GizmoDragController.end(event.pointerId);
+      if (!GizmoController.isTransforming()) {
+        return;
       }
 
-      if (GizmoRotateController.isRotating()) {
-        GizmoRotateController.end();
-      }
+      endActiveTransform(event.pointerId);
     };
 
     const handlePointerCancel = (event) => {
-      if (GizmoDragController.isDragging()) {
-        GizmoDragController.cancel(event.pointerId);
+      if (!GizmoController.isTransforming()) {
+        return;
       }
 
-      if (GizmoRotateController.isRotating()) {
-        GizmoRotateController.cancel();
-      }
+      cancelActiveTransform(event.pointerId);
     };
 
     const handleWindowBlur = () => {
-      if (GizmoDragController.isDragging()) {
-        GizmoDragController.cancel();
+      if (!GizmoController.isTransforming()) {
+        return;
       }
 
-      if (GizmoRotateController.isRotating()) {
-        GizmoRotateController.cancel();
-      }
+      cancelActiveTransform();
     };
 
     window.addEventListener("pointerup", handlePointerUp);
+
     window.addEventListener("pointercancel", handlePointerCancel);
+
     window.addEventListener("blur", handleWindowBlur);
 
     return () => {
@@ -167,10 +152,10 @@ export default function GizmoManager() {
 
       window.removeEventListener("blur", handleWindowBlur);
     };
-  }, []);
+  });
 
   // ============================================================
-  // NO ENTITY
+  // NO SELECTION
   // ============================================================
 
   if (!selectedEntity) {
@@ -178,37 +163,39 @@ export default function GizmoManager() {
   }
 
   // ============================================================
-  // MOVE POINTER DOWN
+  // POINTER DOWN
   // ============================================================
 
-  const handleMovePointerDown = (event, axis) => {
+  const handlePointerDown = (event, axis) => {
     event.stopPropagation();
+
     event.nativeEvent?.stopPropagation();
 
     if (event.button !== undefined && event.button !== 0) {
       return;
     }
 
-    if (
-      GizmoDragController.isDragging() ||
-      GizmoRotateController.isRotating()
-    ) {
+    if (GizmoController.isTransforming()) {
       return;
     }
 
     const object = selectedEntity?.getObject?.();
 
     if (!object) {
-      console.warn("[GizmoManager] Selected entity has no render object");
-
       return;
     }
 
+    /*
+     * Use the DOM canvas as the pointer capture target.
+     *
+     * event.target in R3F is a THREE.Object3D.
+     * nativeEvent.target is the actual canvas/event target.
+     */
     const nativeEvent = event.nativeEvent;
 
     const pointerId = nativeEvent?.pointerId ?? event.pointerId;
 
-    const pointerTarget = event.target;
+    const pointerTarget = nativeEvent?.target ?? event.target;
 
     if (
       pointerTarget &&
@@ -217,172 +204,218 @@ export default function GizmoManager() {
     ) {
       try {
         pointerTarget.setPointerCapture(pointerId);
-      } catch (error) {
-        console.warn("[GizmoManager] Failed to capture pointer", error);
-      }
-    }
-
-    const plane = GizmoDragPlane.build(
-      axis,
-      object.position,
-      camera,
-      event.ray.direction,
-    );
-
-    if (!plane) {
-      console.warn("[GizmoManager] Failed to create drag plane");
-
-      return;
-    }
-
-    const startPoint = GizmoRaycaster.intersectPlane(
-      camera,
-      event.pointer,
-      plane,
-    );
-
-    if (!startPoint) {
-      console.warn("[GizmoManager] Pointer does not intersect drag plane");
-
-      return;
-    }
-
-    const started = GizmoDragController.begin(
-      axis,
-      object.position.clone(),
-      plane,
-      startPoint,
-      pointerId,
-      pointerTarget,
-    );
-
-    if (!started) {
-      try {
-        if (
-          pointerTarget &&
-          typeof pointerTarget.releasePointerCapture === "function" &&
-          pointerId !== undefined
-        ) {
-          pointerTarget.releasePointerCapture(pointerId);
-        }
       } catch {
-        // Ignore pointer-release errors.
+        // Browser may reject capture if the pointer
+        // has already changed ownership.
       }
-
-      return;
     }
 
-    console.log("[GizmoManager] Move drag started", {
-      entity: selectedEntity.name,
-      axis,
-      pointerId,
-    });
-  };
+    // ==========================================================
+    // MOVE
+    // ==========================================================
 
-  // ============================================================
-  // ROTATE POINTER DOWN
-  // ============================================================
-
-  const handleRotatePointerDown = (event, axis) => {
-    event.stopPropagation();
-    event.nativeEvent?.stopPropagation();
-
-    if (event.button !== undefined && event.button !== 0) {
-      return;
-    }
-
-    if (
-      GizmoDragController.isDragging() ||
-      GizmoRotateController.isRotating()
-    ) {
-      return;
-    }
-
-    const object = selectedEntity?.getObject?.();
-
-    if (!object) {
-      console.warn("[GizmoManager] Selected entity has no render object");
-
-      return;
-    }
-
-    const center = object.position.clone();
-
-    const rotationPlane = GizmoRotateController.buildRotationPlane(
-      axis,
-      center,
-    );
-
-    if (!rotationPlane) {
-      return;
-    }
-
-    const startPoint = GizmoRaycaster.intersectPlane(
-      camera,
-      event.pointer,
-      rotationPlane,
-    );
-
-    if (!startPoint) {
-      console.warn(
-        "[GizmoManager] Rotation ring does not intersect rotation plane",
+    if (gizmoMode === GIZMO_MODES.MOVE) {
+      const plane = GizmoDragPlane.build(
+        axis,
+        object.position,
+        camera,
+        event.ray.direction,
       );
 
+      if (!plane) {
+        return;
+      }
+
+      const startPoint = GizmoRaycaster.intersectPlane(
+        camera,
+        event.pointer,
+        plane,
+      );
+
+      if (!startPoint) {
+        return;
+      }
+
+      const started = GizmoDragController.begin(
+        axis,
+        object.position.clone(),
+        plane,
+        startPoint,
+        pointerId,
+        pointerTarget,
+      );
+
+      if (!started) {
+        return;
+      }
+
+      setActiveAxis(axis);
+      setHoveredAxis(axis);
+
       return;
     }
 
-    const started = GizmoRotateController.begin(
-      selectedEntity,
-      axis,
-      startPoint,
-      center,
-    );
+    // ==========================================================
+    // ROTATE
+    // ==========================================================
 
-    if (!started) {
+    if (gizmoMode === GIZMO_MODES.ROTATE) {
+      if (axis !== "x" && axis !== "y" && axis !== "z") {
+        return;
+      }
+
+      const axisVector = new THREE.Vector3();
+
+      if (axis === "x") {
+        axisVector.set(1, 0, 0);
+      }
+
+      if (axis === "y") {
+        axisVector.set(0, 1, 0);
+      }
+
+      if (axis === "z") {
+        axisVector.set(0, 0, 1);
+      }
+
+      const rotationPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+        axisVector,
+        object.position,
+      );
+
+      const startPoint = GizmoRaycaster.intersectPlane(
+        camera,
+        event.pointer,
+        rotationPlane,
+      );
+
+      if (!startPoint) {
+        return;
+      }
+
+      const started = GizmoRotateController.begin(
+        selectedEntity,
+        axis,
+        startPoint,
+        object.position.clone(),
+        rotationPlane,
+        pointerId,
+        pointerTarget,
+      );
+
+      if (!started) {
+        return;
+      }
+
+      setActiveAxis(axis);
+      setHoveredAxis(axis);
+
       return;
     }
 
-    console.log("[GizmoManager] Rotate drag started", {
-      entity: selectedEntity.name,
-      axis,
-    });
+    // ==========================================================
+    // SCALE
+    // ==========================================================
+
+    if (gizmoMode === GIZMO_MODES.SCALE) {
+      const plane = GizmoDragPlane.build(
+        axis,
+        object.position,
+        camera,
+        event.ray.direction,
+      );
+
+      if (!plane) {
+        return;
+      }
+
+      const startPoint = GizmoRaycaster.intersectPlane(
+        camera,
+        event.pointer,
+        plane,
+      );
+
+      if (!startPoint) {
+        return;
+      }
+
+      const started = GizmoScaleController.begin(
+        selectedEntity,
+        axis,
+        startPoint,
+        camera,
+        pointerId,
+        pointerTarget,
+      );
+
+      if (!started) {
+        return;
+      }
+
+      /*
+       * Scale controller uses the same drag plane.
+       */
+      GizmoDragController.begin(
+        axis,
+        object.position.clone(),
+        plane,
+        startPoint,
+        pointerId,
+        pointerTarget,
+      );
+
+      /*
+       * We don't want Move to run.
+       * The Scale controller owns the transform.
+       */
+      GizmoDragController.reset();
+
+      setActiveAxis(axis);
+      setHoveredAxis(axis);
+    }
   };
 
   // ============================================================
-  // POINTER OVER
+  // HOVER
   // ============================================================
 
   const handlePointerOver = (event, axis) => {
     event.stopPropagation();
 
-    if (
-      GizmoDragController.isDragging() ||
-      GizmoRotateController.isRotating()
-    ) {
+    if (GizmoController.isTransforming()) {
       return;
     }
 
+    setHoveredAxis(axis);
+
     GizmoController.setHovered(axis);
+
     GizmoHoverController.enter(axis);
   };
 
   // ============================================================
-  // POINTER OUT
+  // HOVER OUT
   // ============================================================
 
   const handlePointerOut = (event) => {
     event.stopPropagation();
 
-    if (
-      GizmoDragController.isDragging() ||
-      GizmoRotateController.isRotating()
-    ) {
+    if (GizmoController.isTransforming()) {
       return;
     }
 
-    GizmoController.setHovered(null);
+    setHoveredAxis(null);
+
+    GizmoController.clearHover();
+
     GizmoHoverController.leave();
   };
+
+  // ============================================================
+  // HIGHLIGHT
+  // ============================================================
+
+  const isHighlighted = (axis) => hoveredAxis === axis || activeAxis === axis;
 
   // ============================================================
   // RENDER
@@ -392,19 +425,37 @@ export default function GizmoManager() {
     <>
       <GizmoInteraction />
 
-      {mode === "move" && (
+      {gizmoMode === GIZMO_MODES.MOVE && (
         <MoveGizmo
           entity={selectedEntity}
-          onPointerDown={handleMovePointerDown}
+          hoveredAxis={hoveredAxis}
+          activeAxis={activeAxis}
+          isHighlighted={isHighlighted}
+          onPointerDown={handlePointerDown}
           onPointerOver={handlePointerOver}
           onPointerOut={handlePointerOut}
         />
       )}
 
-      {mode === "rotate" && (
+      {gizmoMode === GIZMO_MODES.ROTATE && (
         <RotateGizmo
           entity={selectedEntity}
-          onPointerDown={handleRotatePointerDown}
+          hoveredAxis={hoveredAxis}
+          activeAxis={activeAxis}
+          isHighlighted={isHighlighted}
+          onPointerDown={handlePointerDown}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+        />
+      )}
+
+      {gizmoMode === GIZMO_MODES.SCALE && (
+        <ScaleGizmo
+          entity={selectedEntity}
+          hoveredAxis={hoveredAxis}
+          activeAxis={activeAxis}
+          isHighlighted={isHighlighted}
+          onPointerDown={handlePointerDown}
           onPointerOver={handlePointerOver}
           onPointerOut={handlePointerOut}
         />

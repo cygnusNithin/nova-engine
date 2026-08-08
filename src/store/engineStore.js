@@ -1,189 +1,164 @@
 import { create } from "zustand";
+
 import CameraModes from "../engine/camera/CameraModes";
+import { GIZMO_MODES } from "../engine/editor/gizmos/shared/GizmoConstants";
 
 const useEngineStore = create((set) => ({
+  // ============================================================
+  // KEYBOARD
+  // ============================================================
 
-    //-----------------------------------
-    // Keyboard
-    //-----------------------------------
+  keyboard: {},
 
-    keyboard: {},
+  setKeyboard: (keyboard) =>
+    set({
+      keyboard,
+    }),
 
-    setKeyboard: (keyboard) =>
-        set({ keyboard }),
+  // ============================================================
+  // MOUSE
+  // ============================================================
 
-    //-----------------------------------
-    // Mouse
-    //-----------------------------------
+  mouse: {
+    x: 0,
+    y: 0,
 
-    mouse: {
+    deltaX: 0,
+    deltaY: 0,
 
-        x: 0,
-        y: 0,
+    left: false,
+    middle: false,
+    right: false,
 
+    wheel: 0,
+
+    locked: false,
+  },
+
+  setMouse: (mouse) =>
+    set({
+      mouse,
+    }),
+
+  consumeMouseMotion: () =>
+    set((state) => ({
+      mouse: {
+        ...state.mouse,
         deltaX: 0,
         deltaY: 0,
-
-        left: false,
-        middle: false,
-        right: false,
-
         wheel: 0,
+      },
+    })),
 
-        locked: false,
+  // ============================================================
+  // PERFORMANCE
+  // ============================================================
 
-    },
+  fps: 0,
 
-    setMouse: (mouse) =>
-        set({ mouse }),
+  setFPS: (fps) =>
+    set({
+      fps,
+    }),
 
-    consumeMouseMotion: () =>
-        set((state) => ({
-            mouse: {
-                ...state.mouse,
-                deltaX: 0,
-                deltaY: 0,
-                wheel: 0,
-            },
-        })),
+  // ============================================================
+  // GRAPHICS
+  // ============================================================
 
-    //-----------------------------------
-    // Performance
-    //-----------------------------------
+  quality: "High",
 
-    fps: 0,
+  setQuality: (quality) =>
+    set({
+      quality,
+    }),
 
-    setFPS: (fps) =>
-        set({ fps }),
+  // ============================================================
+  // EDITOR
+  // ============================================================
 
-    //-----------------------------------
-    // Graphics
-    //-----------------------------------
+  editor: {
+    enabled: true,
 
-    quality: "High",
+    mode: CameraModes.EDITOR,
 
-    setQuality: (quality) =>
-        set({ quality }),
+    cameraSpeed: 0.15,
 
-    //-----------------------------------
-    // Editor
-    //-----------------------------------
+    mouseSensitivity: 0.002,
 
-    editor: {
+    showGrid: true,
 
-        enabled: true,
+    showAxes: true,
 
-        mode: CameraModes.EDITOR,
+    selectedEntity: null,
 
-        cameraSpeed: 0.15,
+    hoveredEntity: null,
 
-        mouseSensitivity: 0.002,
+    multiSelection: [],
 
-        showGrid: true,
+    // ----------------------------------------------------------
+    // Transform tool
+    // ----------------------------------------------------------
 
-        showAxes: true,
+    gizmoMode: GIZMO_MODES.MOVE,
+  },
+
+  setEditor: (editor) =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
+        ...editor,
+      },
+    })),
+
+  setSelectedEntity: (entity) =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
+        selectedEntity: entity,
+      },
+    })),
+
+  setHoveredEntity: (entity) =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
+        hoveredEntity: entity,
+      },
+    })),
+
+  clearSelection: () =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
 
         selectedEntity: null,
 
         hoveredEntity: null,
 
-        multiSelection: []
+        multiSelection: [],
+      },
+    })),
 
-    },
+  // ============================================================
+  // ENTITIES
+  // ============================================================
 
-    setEditor: (editor) =>
-        set((state) => ({
+  entities: [],
 
-            editor: {
+  setEntities: (entities) =>
+    set({
+      entities,
+    }),
 
-                ...state.editor,
+  addEntity: (entity) =>
+    set((state) => ({
+      entities: [...state.entities, entity],
+    })),
 
-                ...editor
-
-            }
-
-        })),
-
-    setSelectedEntity: (entity) =>
-        set((state) => ({
-
-            editor: {
-
-                ...state.editor,
-
-                selectedEntity: entity
-
-            }
-
-        })),
-
-    setHoveredEntity: (entity) =>
-        set((state) => ({
-
-            editor: {
-
-                ...state.editor,
-
-                hoveredEntity: entity
-
-            }
-
-        })),
-
-    clearSelection: () =>
-        set((state) => ({
-
-            editor: {
-
-                ...state.editor,
-
-                selectedEntity: null,
-
-                hoveredEntity: null,
-
-                multiSelection: []
-
-            }
-
-        })),
-
-    //-----------------------------------
-    // Entities
-    //-----------------------------------
-
-    entities: [],
-
-    setEntities: (entities) =>
-        set({
-
-            entities
-
-        }),
-
-    addEntity: (entity) =>
-        set((state) => ({
-
-            entities: [
-
-                ...state.entities,
-
-                entity
-
-            ]
-
-        })),
-
-    removeEntity: (entity) =>
-        set((state) => ({
-
-            entities: state.entities.filter(
-
-                e => e !== entity
-
-            )
-
-        }))
-
+  removeEntity: (entity) =>
+    set((state) => ({
+      entities: state.entities.filter((e) => e !== entity),
+    })),
 }));
 
 export default useEngineStore;

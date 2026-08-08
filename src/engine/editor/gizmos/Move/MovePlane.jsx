@@ -2,6 +2,8 @@ import * as THREE from "three";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
 
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
+
 export default function MovePlane({
   axis,
   color,
@@ -10,10 +12,13 @@ export default function MovePlane({
   visualPosition,
   hitPosition,
   rotation,
+  highlighted,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -30,8 +35,9 @@ export default function MovePlane({
     <>
       <mesh position={visualPosition} rotation={rotation}>
         <planeGeometry args={[visualSize, visualSize]} />
+
         <primitive
-          object={GizmoMaterial.getTransparent(color)}
+          object={GizmoMaterial.getTransparent(displayColor)}
           attach="material"
         />
       </mesh>
@@ -45,6 +51,7 @@ export default function MovePlane({
         onPointerOut={handlePointerOut}
       >
         <planeGeometry args={[hitSize, hitSize]} />
+
         <meshBasicMaterial
           transparent
           opacity={0}
