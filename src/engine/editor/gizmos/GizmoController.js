@@ -1,18 +1,15 @@
 import GizmoState from "./GizmoState";
 
 class GizmoController {
+  // ============================================================
+  // SELECTION
+  // ============================================================
+
   select(entity) {
-    console.log("========== GIZMO CONTROLLER SELECT ==========");
-    console.log("Entity:", entity);
-
     GizmoState.entity = entity;
-
-    console.log("GizmoState.entity:", GizmoState.entity);
   }
 
   clear() {
-    console.log("========== GIZMO CONTROLLER CLEAR ==========");
-
     GizmoState.entity = null;
     GizmoState.axis = null;
     GizmoState.hoveredAxis = null;
@@ -23,41 +20,48 @@ class GizmoController {
     return GizmoState.entity;
   }
 
-  beginDrag(axis) {
-    console.log("========== GIZMO CONTROLLER BEGIN DRAG ==========");
-    console.log("Axis:", axis);
-
-    GizmoState.axis = axis;
-    GizmoState.dragging = true;
-  }
-
-  updateDrag(pointer) {
-    if (!GizmoState.dragging) {
-      return;
-    }
-
-    GizmoState.pointer = pointer;
-  }
-
-  endDrag() {
-    console.log("========== GIZMO CONTROLLER END DRAG ==========");
-
-    GizmoState.dragging = false;
-    GizmoState.axis = null;
-  }
+  // ============================================================
+  // MODE
+  // ============================================================
 
   setMode(mode) {
-    console.log("========== GIZMO MODE ==========");
-    console.log("Mode:", mode);
-
     GizmoState.mode = mode;
   }
 
+  getMode() {
+    return GizmoState.mode;
+  }
+
+  // ============================================================
+  // HOVER
+  // ============================================================
+
   setHovered(axis) {
-    console.log("========== GIZMO HOVER STATE ==========");
-    console.log("Axis:", axis);
+    if (GizmoState.dragging) {
+      return;
+    }
 
     GizmoState.hoveredAxis = axis;
+  }
+
+  clearHover() {
+    GizmoState.hoveredAxis = null;
+  }
+
+  getHoveredAxis() {
+    return GizmoState.hoveredAxis;
+  }
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  isDragging() {
+    return GizmoState.dragging;
+  }
+
+  getAxis() {
+    return GizmoState.axis;
   }
 }
 
