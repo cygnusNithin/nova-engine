@@ -35,7 +35,6 @@ export default function GizmoManager() {
 
     if (!selectedEntity) {
       GizmoController.clear();
-
       GizmoHoverController.clear();
 
       return;
@@ -45,7 +44,7 @@ export default function GizmoManager() {
   }, [selectedEntity]);
 
   // ============================================================
-  // GLOBAL POINTER EVENTS
+  // GLOBAL POINTER / WINDOW EVENTS
   // ============================================================
 
   useEffect(() => {
@@ -65,14 +64,26 @@ export default function GizmoManager() {
       GizmoDragController.cancel(event.pointerId);
     };
 
-    window.addEventListener("pointerup", handlePointerUp);
+    // If the browser/window loses focus during a drag,
+    // cancel instead of leaving the gizmo in a stuck state.
+    const handleWindowBlur = () => {
+      if (!GizmoDragController.isDragging()) {
+        return;
+      }
 
+      console.warn("[GizmoManager] Window lost focus -> cancelling gizmo drag");
+
+      GizmoDragController.cancel();
+    };
+
+    window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("blur", handleWindowBlur);
 
     return () => {
       window.removeEventListener("pointerup", handlePointerUp);
-
       window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("blur", handleWindowBlur);
     };
   }, []);
 
@@ -93,6 +104,19 @@ export default function GizmoManager() {
 
     event.nativeEvent?.stopPropagation();
 
+    // ----------------------------------------------------------
+    // Only primary mouse button can start a transform.
+    //
+    // Prevent:
+    // 0 = left click   -> allowed
+    // 1 = middle click -> ignored
+    // 2 = right click  -> ignored
+    // ----------------------------------------------------------
+
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
+
     if (GizmoDragController.isDragging()) {
       return;
     }
@@ -105,9 +129,9 @@ export default function GizmoManager() {
       return;
     }
 
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
     // Pointer capture
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
 
     const nativeEvent = event.nativeEvent;
 
@@ -127,9 +151,9 @@ export default function GizmoManager() {
       }
     }
 
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
     // Build drag plane
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
 
     const plane = GizmoDragPlane.build(
       axis,
@@ -144,9 +168,9 @@ export default function GizmoManager() {
       return;
     }
 
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
     // Calculate starting intersection
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
 
     const startPoint = GizmoRaycaster.intersectPlane(
       camera,
@@ -160,9 +184,9 @@ export default function GizmoManager() {
       return;
     }
 
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
     // Begin drag
-    // ------------------------------------------------------------
+    // ----------------------------------------------------------
 
     const started = GizmoDragController.begin(
       axis,
@@ -174,7 +198,8 @@ export default function GizmoManager() {
     );
 
     if (!started) {
-      // If drag initialization fails, release capture.
+      // If drag initialization fails,
+      // release pointer capture.
       try {
         if (
           pointerTarget &&
@@ -210,7 +235,6 @@ export default function GizmoManager() {
     }
 
     GizmoController.setHovered(axis);
-
     GizmoHoverController.enter(axis);
   };
 
@@ -226,7 +250,6 @@ export default function GizmoManager() {
     }
 
     GizmoController.setHovered(null);
-
     GizmoHoverController.leave();
   };
 
