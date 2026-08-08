@@ -11,19 +11,16 @@ import { GIZMO_MODES } from "../gizmos/shared/GizmoConstants";
 function cancelActiveTransform() {
   if (GizmoDragController.isDragging()) {
     GizmoDragController.cancel();
-
     return true;
   }
 
   if (GizmoRotateController.isRotating()) {
     GizmoRotateController.cancel();
-
     return true;
   }
 
   if (GizmoScaleController.isScaling()) {
     GizmoScaleController.cancel();
-
     return true;
   }
 
@@ -33,10 +30,6 @@ function cancelActiveTransform() {
 export default function EditorShortcuts() {
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // ----------------------------------------------------------
-      // Do not steal shortcuts from text inputs.
-      // ----------------------------------------------------------
-
       const target = event.target;
 
       if (
@@ -49,29 +42,19 @@ export default function EditorShortcuts() {
         return;
       }
 
-      // ----------------------------------------------------------
-      // ESCAPE
-      // ----------------------------------------------------------
-
       if (event.code === "Escape") {
         if (GizmoController.isTransforming()) {
           event.preventDefault();
-
           cancelActiveTransform();
         }
 
         return;
       }
 
-      // ----------------------------------------------------------
-      // Active transform owns the keyboard.
-      //
-      // W/E/R must NOT switch tools until the drag ends.
-      // ----------------------------------------------------------
-
+      // Transform tools own Q / E / R while dragging.
       if (GizmoController.isTransforming()) {
         if (
-          event.code === "KeyW" ||
+          event.code === "KeyQ" ||
           event.code === "KeyE" ||
           event.code === "KeyR"
         ) {
@@ -81,10 +64,6 @@ export default function EditorShortcuts() {
         return;
       }
 
-      // ----------------------------------------------------------
-      // Ignore auto-repeat.
-      // ----------------------------------------------------------
-
       if (event.repeat) {
         return;
       }
@@ -93,7 +72,7 @@ export default function EditorShortcuts() {
       // MOVE
       // ----------------------------------------------------------
 
-      if (event.code === "KeyW") {
+      if (event.code === "KeyQ") {
         event.preventDefault();
 
         GizmoController.setMode(GIZMO_MODES.MOVE);

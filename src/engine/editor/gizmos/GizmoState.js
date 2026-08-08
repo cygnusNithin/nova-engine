@@ -33,14 +33,12 @@ class GizmoState {
     /*
      * True while Move / Rotate / Scale owns the pointer.
      *
-     * This is different from "hover".
-     *
      * While transforming:
      *
-     * - selection is locked
-     * - W/E/R cannot change the tool
-     * - scene raycasting is blocked
-     * - camera transform input is blocked
+     * - scene selection is blocked
+     * - selection cannot switch entities
+     * - gizmo mode cannot change
+     * - camera transform input can be blocked
      */
     this.transforming = false;
 

@@ -18,8 +18,6 @@ const hitPlaneCenter = planeInnerOffset + hitPlaneSize / 2;
 
 export default function MoveGizmo({
   entity,
-  hoveredAxis,
-  activeAxis,
   isHighlighted,
   onPointerDown,
   onPointerOver,

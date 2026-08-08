@@ -1,6 +1,7 @@
 import * as THREE from "three";
 
 import EditorTransform from "../../transform/EditorTransform";
+
 import GizmoState from "../GizmoState";
 
 class GizmoScaleController {
@@ -82,6 +83,7 @@ class GizmoScaleController {
     this.initialized = true;
 
     GizmoState.transforming = true;
+
     GizmoState.axis = axis;
 
     return true;
@@ -126,38 +128,23 @@ class GizmoScaleController {
     let amount;
 
     if (axis === "xyz") {
-      /*
-       * Uniform scale follows screen-space vertical movement.
-       */
       amount = delta.dot(this.screenAxis);
     } else {
-      /*
-       * Axis scale follows the selected world axis.
-       */
       amount = delta.dot(this.scaleAxis);
     }
 
-    /*
-     * Keep the sensitivity deliberately conservative.
-     */
     const factor = Math.max(0.01, 1 + amount);
 
     const nextScale = this.startScale.clone();
 
     if (axis === "xyz") {
       nextScale.multiplyScalar(factor);
-    } else {
-      if (axis === "x") {
-        nextScale.x = Math.max(0.01, this.startScale.x * factor);
-      }
-
-      if (axis === "y") {
-        nextScale.y = Math.max(0.01, this.startScale.y * factor);
-      }
-
-      if (axis === "z") {
-        nextScale.z = Math.max(0.01, this.startScale.z * factor);
-      }
+    } else if (axis === "x") {
+      nextScale.x = Math.max(0.01, this.startScale.x * factor);
+    } else if (axis === "y") {
+      nextScale.y = Math.max(0.01, this.startScale.y * factor);
+    } else if (axis === "z") {
+      nextScale.z = Math.max(0.01, this.startScale.z * factor);
     }
 
     EditorTransform.setEntityScale(
@@ -274,8 +261,15 @@ class GizmoScaleController {
 
     this.initialized = false;
 
+    /*
+     * Scale owns the drag plane.
+     */
+    GizmoState.dragPlane = null;
+
     GizmoState.transforming = false;
+
     GizmoState.axis = null;
+
     GizmoState.hoveredAxis = null;
   }
 

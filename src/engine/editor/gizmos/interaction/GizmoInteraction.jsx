@@ -67,7 +67,7 @@ export default function GizmoInteraction() {
 
       const axis = GizmoScaleController.getAxis();
 
-      const plane = GizmoDragPlane.get();
+      const plane = GizmoState.dragPlane;
 
       if (!plane || !axis) {
         return;

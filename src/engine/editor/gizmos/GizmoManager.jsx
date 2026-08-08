@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+
 import { useThree } from "@react-three/fiber";
+
 import * as THREE from "three";
 
 import useEngineStore from "../../../store/engineStore";
@@ -7,20 +9,28 @@ import useEngineStore from "../../../store/engineStore";
 import GizmoController from "./GizmoController";
 
 import GizmoHoverController from "./interaction/GizmoHoverController";
+
 import GizmoDragController from "./interaction/GizmoDragController";
+
 import GizmoDragPlane from "./interaction/GizmoDragPlane";
+
 import GizmoRaycaster from "./interaction/GizmoRaycaster";
+
 import GizmoRotateController from "./interaction/GizmoRotateController";
+
 import GizmoScaleController from "./interaction/GizmoScaleController";
-import GizmoState from "./GizmoState";
 
 import GizmoInteraction from "./interaction/GizmoInteraction";
 
 import MoveGizmo from "./Move/MoveGizmo";
+
 import RotateGizmo from "./Rotate/RotateGizmo";
+
 import ScaleGizmo from "./Scale/ScaleGizmo";
 
 import { GIZMO_MODES } from "./shared/GizmoConstants";
+
+import GizmoState from "./GizmoState";
 
 export default function GizmoManager() {
   const selectedEntity = useEngineStore((state) => state.editor.selectedEntity);
@@ -47,8 +57,6 @@ export default function GizmoManager() {
 
       GizmoHoverController.clear();
 
-      setHoveredAxis(null);
-
       return;
     }
 
@@ -56,7 +64,7 @@ export default function GizmoManager() {
   }, [selectedEntity]);
 
   // ============================================================
-  // MODE CHANGE
+  // MODE
   // ============================================================
 
   useEffect(() => {
@@ -65,9 +73,6 @@ export default function GizmoManager() {
     }
 
     GizmoController.setMode(gizmoMode);
-
-    setHoveredAxis(null);
-    setActiveAxis(null);
   }, [gizmoMode]);
 
   // ============================================================
@@ -88,7 +93,9 @@ export default function GizmoManager() {
     }
 
     setActiveAxis(null);
+
     setHoveredAxis(null);
+
     GizmoHoverController.clear();
   };
 
@@ -106,7 +113,9 @@ export default function GizmoManager() {
     }
 
     setActiveAxis(null);
+
     setHoveredAxis(null);
+
     GizmoHoverController.clear();
   };
 
@@ -152,7 +161,7 @@ export default function GizmoManager() {
 
       window.removeEventListener("blur", handleWindowBlur);
     };
-  });
+  }, []);
 
   // ============================================================
   // NO SELECTION
@@ -185,12 +194,6 @@ export default function GizmoManager() {
       return;
     }
 
-    /*
-     * Use the DOM canvas as the pointer capture target.
-     *
-     * event.target in R3F is a THREE.Object3D.
-     * nativeEvent.target is the actual canvas/event target.
-     */
     const nativeEvent = event.nativeEvent;
 
     const pointerId = nativeEvent?.pointerId ?? event.pointerId;
@@ -205,8 +208,7 @@ export default function GizmoManager() {
       try {
         pointerTarget.setPointerCapture(pointerId);
       } catch {
-        // Browser may reject capture if the pointer
-        // has already changed ownership.
+        // Pointer capture may already belong elsewhere.
       }
     }
 
@@ -250,6 +252,7 @@ export default function GizmoManager() {
       }
 
       setActiveAxis(axis);
+
       setHoveredAxis(axis);
 
       return;
@@ -308,6 +311,7 @@ export default function GizmoManager() {
       }
 
       setActiveAxis(axis);
+
       setHoveredAxis(axis);
 
       return;
@@ -353,22 +357,12 @@ export default function GizmoManager() {
       }
 
       /*
-       * Scale controller uses the same drag plane.
+       * Scale owns the transform.
+       *
+       * Do NOT start GizmoDragController here.
+       * GizmoDragController belongs to Move.
        */
-      GizmoDragController.begin(
-        axis,
-        object.position.clone(),
-        plane,
-        startPoint,
-        pointerId,
-        pointerTarget,
-      );
-
-      /*
-       * We don't want Move to run.
-       * The Scale controller owns the transform.
-       */
-      GizmoDragController.reset();
+      GizmoState.dragPlane = plane;
 
       setActiveAxis(axis);
       setHoveredAxis(axis);
@@ -415,7 +409,9 @@ export default function GizmoManager() {
   // HIGHLIGHT
   // ============================================================
 
-  const isHighlighted = (axis) => hoveredAxis === axis || activeAxis === axis;
+  const isHighlighted = (axis) => {
+    return hoveredAxis === axis || activeAxis === axis;
+  };
 
   // ============================================================
   // RENDER

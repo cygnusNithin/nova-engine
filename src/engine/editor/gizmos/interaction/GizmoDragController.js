@@ -1,12 +1,15 @@
 import * as THREE from "three";
 
 import GizmoState from "../GizmoState";
+
 import GizmoMoveController from "./GizmoMoveController";
 
 class GizmoDragController {
   constructor() {
     this.startPoint = new THREE.Vector3();
+
     this.currentPoint = new THREE.Vector3();
+
     this.delta = new THREE.Vector3();
 
     // ------------------------------------------------------------
@@ -14,6 +17,7 @@ class GizmoDragController {
     // ------------------------------------------------------------
 
     this.originalPosition = new THREE.Vector3();
+
     this.hasTransformSnapshot = false;
   }
 
@@ -33,6 +37,10 @@ class GizmoDragController {
       return false;
     }
 
+    if (GizmoState.transforming) {
+      return false;
+    }
+
     const entity = GizmoState.entity;
 
     if (!entity) {
@@ -48,10 +56,11 @@ class GizmoDragController {
     }
 
     // ----------------------------------------------------------
-    // Capture transform BEFORE any movement happens
+    // Capture transform BEFORE movement
     // ----------------------------------------------------------
 
     this.originalPosition.copy(entity.transform.position);
+
     this.hasTransformSnapshot = true;
 
     // ----------------------------------------------------------
@@ -59,19 +68,36 @@ class GizmoDragController {
     // ----------------------------------------------------------
 
     GizmoState.axis = axis;
+
     GizmoState.dragOrigin = origin?.clone() ?? new THREE.Vector3();
+
     GizmoState.dragPlane = plane;
+
     GizmoState.pointer = startPoint.clone();
+
     GizmoState.pointerId = pointerId;
+
     GizmoState.pointerTarget = pointerTarget;
+
     GizmoState.dragging = true;
+
+    /*
+     * IMPORTANT:
+     *
+     * Move is a real transform operation.
+     * Therefore Move must participate in the same
+     * transform lock as Rotate and Scale.
+     */
+    GizmoState.transforming = true;
 
     // ----------------------------------------------------------
     // Internal drag state
     // ----------------------------------------------------------
 
     this.startPoint.copy(startPoint);
+
     this.currentPoint.copy(startPoint);
+
     this.delta.set(0, 0, 0);
 
     GizmoMoveController.reset();
@@ -128,13 +154,6 @@ class GizmoDragController {
 
     this.releasePointerCapture();
 
-    // ----------------------------------------------------------
-    // Commit current transform.
-    //
-    // We intentionally do NOT restore anything here.
-    // The current entity transform becomes the committed state.
-    // ----------------------------------------------------------
-
     GizmoMoveController.reset();
 
     this.clearTransformSnapshot();
@@ -163,10 +182,6 @@ class GizmoDragController {
 
     this.releasePointerCapture();
 
-    // ----------------------------------------------------------
-    // Restore the entity to its state before the drag began.
-    // ----------------------------------------------------------
-
     const entity = GizmoState.entity;
 
     if (entity && entity.transform && this.hasTransformSnapshot) {
@@ -192,6 +207,7 @@ class GizmoDragController {
 
   releasePointerCapture() {
     const target = GizmoState.pointerTarget;
+
     const pointerId = GizmoState.pointerId;
 
     if (!target || pointerId === null) {
@@ -206,7 +222,7 @@ class GizmoDragController {
         target.releasePointerCapture(pointerId);
       }
     } catch {
-      // Pointer may already have been released.
+      // Pointer may already be released.
     }
   }
 
@@ -216,6 +232,7 @@ class GizmoDragController {
 
   clearTransformSnapshot() {
     this.originalPosition.set(0, 0, 0);
+
     this.hasTransformSnapshot = false;
   }
 
@@ -225,15 +242,25 @@ class GizmoDragController {
 
   resetState() {
     GizmoState.dragging = false;
+
+    GizmoState.transforming = false;
+
     GizmoState.axis = null;
+
     GizmoState.dragOrigin = null;
+
     GizmoState.dragPlane = null;
+
     GizmoState.pointer = null;
+
     GizmoState.pointerId = null;
+
     GizmoState.pointerTarget = null;
 
     this.startPoint.set(0, 0, 0);
+
     this.currentPoint.set(0, 0, 0);
+
     this.delta.set(0, 0, 0);
   }
 

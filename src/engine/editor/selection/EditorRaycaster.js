@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
+
 import { useThree } from "@react-three/fiber";
+
 import * as THREE from "three";
 
 import EditorSelection from "./EditorSelection";
@@ -12,29 +14,30 @@ export default function EditorRaycaster() {
   const { camera, scene } = useThree();
 
   const raycaster = useRef(new THREE.Raycaster());
+
   const pointer = useRef(new THREE.Vector2());
 
   useEffect(() => {
     function onPointerDown(event) {
-      // ============================================================
+      // ==========================================================
       // LEFT MOUSE BUTTON ONLY
-      // ============================================================
+      // ==========================================================
 
       if (event.button !== 0) {
         return;
       }
 
-      // ============================================================
+      // ==========================================================
       // TRANSFORM LOCK
-      // ============================================================
+      // ==========================================================
 
       if (GizmoController.isTransforming()) {
         return;
       }
 
-      // ============================================================
+      // ==========================================================
       // IGNORE NOVA EDITOR UI
-      // ============================================================
+      // ==========================================================
 
       const target = event.target;
 
@@ -45,31 +48,34 @@ export default function EditorRaycaster() {
         return;
       }
 
-      // ============================================================
+      // ==========================================================
       // POINTER -> NDC
-      // ============================================================
+      // ==========================================================
 
       const rect = event.target?.getBoundingClientRect?.();
 
       if (rect) {
         pointer.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
 
-        pointer.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        pointer.current.y = -(
+          ((event.clientY - rect.top) / rect.height) * 2 -
+          1
+        );
       } else {
         pointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
 
-        pointer.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        pointer.current.y = -((event.clientY / window.innerHeight) * 2 - 1);
       }
 
-      // ============================================================
+      // ==========================================================
       // UPDATE RAY
-      // ============================================================
+      // ==========================================================
 
       raycaster.current.setFromCamera(pointer.current, camera);
 
-      // ============================================================
+      // ==========================================================
       // COLLECT RAYCASTABLE MESHES
-      // ============================================================
+      // ==========================================================
 
       const meshes = [];
 
@@ -85,9 +91,9 @@ export default function EditorRaycaster() {
         meshes.push(object);
       });
 
-      // ============================================================
+      // ==========================================================
       // RAYCAST
-      // ============================================================
+      // ==========================================================
 
       const intersects = raycaster.current.intersectObjects(meshes, false);
 
@@ -109,9 +115,9 @@ export default function EditorRaycaster() {
         return true;
       });
 
-      // ============================================================
+      // ==========================================================
       // NOTHING HIT
-      // ============================================================
+      // ==========================================================
 
       if (!hits.length) {
         EditorSelection.clearSelection();
@@ -119,12 +125,11 @@ export default function EditorRaycaster() {
         return;
       }
 
-      // ============================================================
+      // ==========================================================
       // FIND ENTITY
-      // ============================================================
+      // ==========================================================
 
       let selectedEntity = null;
-      let selectedObject = null;
 
       for (const hit of hits) {
         let object = hit.object;
@@ -132,7 +137,6 @@ export default function EditorRaycaster() {
         while (object) {
           if (object.userData?.entity) {
             selectedEntity = object.userData.entity;
-            selectedObject = object;
 
             break;
           }
@@ -142,7 +146,6 @@ export default function EditorRaycaster() {
 
             if (entity) {
               selectedEntity = entity;
-              selectedObject = object;
 
               break;
             }
@@ -156,9 +159,9 @@ export default function EditorRaycaster() {
         }
       }
 
-      // ============================================================
+      // ==========================================================
       // NO ENTITY
-      // ============================================================
+      // ==========================================================
 
       if (!selectedEntity) {
         EditorSelection.clearSelection();
@@ -166,9 +169,9 @@ export default function EditorRaycaster() {
         return;
       }
 
-      // ============================================================
+      // ==========================================================
       // SELECT
-      // ============================================================
+      // ==========================================================
 
       EditorSelection.selectEntity(selectedEntity);
     }
