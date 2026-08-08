@@ -45,7 +45,10 @@ export default function GizmoInteraction() {
     // Calculate drag delta
     // ------------------------------------------------------------
 
-    const delta = GizmoDragController.update(point);
+    const delta = GizmoDragController.update(
+      point,
+      GizmoDragController.getPointerId(),
+    );
 
     if (!delta) {
       return;

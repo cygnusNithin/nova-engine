@@ -67,7 +67,7 @@ Nova Engine
     │
     └── Systems
 
-    Phase 2 — Entity & Scene Architecture
+    ## Phase 2 — Entity & Scene Architecture
 
 Status: COMPLETE
 
@@ -104,7 +104,7 @@ World
              └── Three.js children
 
 
-Phase 3 — Editor Object Foundation
+## Phase 3 — Editor Object Foundation
 
 Status: COMPLETE
 
@@ -121,7 +121,7 @@ Entity/Object3D editing relationship
 
 The editor operates on Entities rather than directly treating arbitrary Three.js objects as the authoritative world objects.
 
-Phase 4 — Selection System
+## Phase 4 — Selection System
 
 Status: COMPLETE
 
@@ -159,7 +159,7 @@ selectedEntityId
    ├── Inspector
    └── Gizmo
 PART II — EDITOR CORE
-Phase 5 — Transform Gizmo
+## Phase 5 — Transform Gizmo
 
 Status: IN PROGRESS — CURRENT PHASE
 
@@ -210,7 +210,7 @@ Target:
           Z
 
         XY / XZ / YZ
-Phase 6 — Editor Camera
+## Phase 6 — Editor Camera
 
 Status: NOT STARTED
 
