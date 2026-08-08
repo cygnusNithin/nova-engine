@@ -17,26 +17,20 @@ export default function GizmoInteraction() {
     // ============================================================
 
     if (GizmoRotateController.isRotating()) {
-      const entity = GizmoState.entity;
+      const entity = GizmoRotateController.getEntity();
 
       if (!entity) {
-        GizmoRotateController.cancel(entity);
+        GizmoRotateController.cancel();
         return;
       }
 
-      const axis = GizmoState.axis;
+      const axis = GizmoRotateController.getAxis();
 
       if (!axis) {
         return;
       }
 
-      const origin = GizmoState.rotationOrigin;
-
-      if (!origin) {
-        return;
-      }
-
-      const rotationPlane = GizmoState.rotationPlane;
+      const rotationPlane = GizmoRotateController.getRotationPlane();
 
       if (!rotationPlane) {
         return;
@@ -52,7 +46,7 @@ export default function GizmoInteraction() {
         return;
       }
 
-      GizmoRotateController.update(entity, axis, point, origin);
+      GizmoRotateController.update(entity, axis, point);
 
       return;
     }
@@ -65,31 +59,18 @@ export default function GizmoInteraction() {
       return;
     }
 
-    // ------------------------------------------------------------
-    // Get drag plane
-    // ------------------------------------------------------------
-
     const plane = GizmoDragPlane.get();
 
     if (!plane) {
       console.warn("[GizmoInteraction] No drag plane");
-
       return;
     }
-
-    // ------------------------------------------------------------
-    // Ray -> Plane intersection
-    // ------------------------------------------------------------
 
     const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
 
     if (!point) {
       return;
     }
-
-    // ------------------------------------------------------------
-    // Calculate drag delta
-    // ------------------------------------------------------------
 
     const delta = GizmoDragController.update(
       point,
@@ -99,18 +80,6 @@ export default function GizmoInteraction() {
     if (!delta) {
       return;
     }
-
-    // ------------------------------------------------------------
-    // MOVE
-    // ------------------------------------------------------------
-
-    console.log("========== MOVE ==========");
-
-    console.log("Entity:", GizmoState.entity);
-
-    console.log("Axis:", GizmoState.axis);
-
-    console.log("Delta:", delta);
 
     GizmoMoveController.move(GizmoState.entity, GizmoState.axis, delta);
   });

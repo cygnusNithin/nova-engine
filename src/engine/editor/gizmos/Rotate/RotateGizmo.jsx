@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-
 import RotateRing from "./RotateRing";
 
 import { GIZMO_AXIS, GIZMO_COLORS } from "../shared/GizmoConstants";
@@ -10,16 +8,13 @@ export default function RotateGizmo({
   onPointerOver,
   onPointerOut,
 }) {
-  const position = useMemo(() => {
-    if (!entity?.getObject) {
-      return [0, 0, 0];
-    }
-
-    return entity.getObject().position.toArray();
-  }, [entity]);
+  const position = entity?.getObject
+    ? entity.getObject().position.toArray()
+    : [0, 0, 0];
 
   return (
     <group position={position}>
+      {/* X ROTATION RING */}
       <RotateRing
         axis={GIZMO_AXIS.X}
         color={GIZMO_COLORS.X}
@@ -29,6 +24,7 @@ export default function RotateGizmo({
         onPointerOut={onPointerOut}
       />
 
+      {/* Y ROTATION RING */}
       <RotateRing
         axis={GIZMO_AXIS.Y}
         color={GIZMO_COLORS.Y}
@@ -38,6 +34,7 @@ export default function RotateGizmo({
         onPointerOut={onPointerOut}
       />
 
+      {/* Z ROTATION RING */}
       <RotateRing
         axis={GIZMO_AXIS.Z}
         color={GIZMO_COLORS.Z}

@@ -48,6 +48,41 @@ class GizmoRotateController {
   }
 
   // ============================================================
+  // BUILD ROTATION PLANE
+  // ============================================================
+
+  buildRotationPlane(axis, center) {
+    if (!center) {
+      return null;
+    }
+
+    let normal;
+
+    switch (axis) {
+      case "x":
+        normal = new THREE.Vector3(1, 0, 0);
+        break;
+
+      case "y":
+        normal = new THREE.Vector3(0, 1, 0);
+        break;
+
+      case "z":
+        normal = new THREE.Vector3(0, 0, 1);
+        break;
+
+      default:
+        console.warn("[GizmoRotateController] Invalid rotation axis:", axis);
+
+        return null;
+    }
+
+    this.rotationPlane.setFromNormalAndCoplanarPoint(normal, center);
+
+    return this.rotationPlane;
+  }
+
+  // ============================================================
   // BEGIN ROTATION
   // ============================================================
 
@@ -76,6 +111,20 @@ class GizmoRotateController {
       return false;
     }
 
+    const plane = this.buildRotationPlane(axis, center);
+
+    if (!plane) {
+      return false;
+    }
+
+    const startVector = startPoint.clone().sub(center);
+
+    if (startVector.lengthSq() === 0) {
+      console.warn("[GizmoRotateController] Invalid start rotation vector");
+
+      return false;
+    }
+
     this.entity = entity;
 
     this.axis = axis;
@@ -86,7 +135,7 @@ class GizmoRotateController {
 
     this.startRotation.copy(entity.transform.rotation);
 
-    this.startVector.copy(startPoint).sub(center).normalize();
+    this.startVector.copy(startVector).normalize();
 
     this.currentVector.copy(this.startVector);
 
@@ -95,7 +144,8 @@ class GizmoRotateController {
     console.log("[GizmoRotateController] Rotation started", {
       entity: entity.name,
       axis,
-      startRotation: this.startRotation,
+      center: this.rotationCenter.clone(),
+      startRotation: this.startRotation.clone(),
     });
 
     return true;
@@ -126,14 +176,13 @@ class GizmoRotateController {
       return false;
     }
 
-    this.currentVector.copy(currentPoint).sub(this.rotationCenter).normalize();
+    const currentVector = currentPoint.clone().sub(this.rotationCenter);
 
-    if (
-      this.startVector.lengthSq() === 0 ||
-      this.currentVector.lengthSq() === 0
-    ) {
+    if (currentVector.lengthSq() === 0) {
       return false;
     }
+
+    this.currentVector.copy(currentVector).normalize();
 
     const angle = this.getSignedAngle(
       this.startVector,
@@ -164,14 +213,12 @@ class GizmoRotateController {
         return false;
     }
 
-    EditorTransform.setEntityRotation(
+    return EditorTransform.setEntityRotation(
       entity,
       rotation.x,
       rotation.y,
       rotation.z,
     );
-
-    return true;
   }
 
   // ============================================================
