@@ -10,10 +10,15 @@ export default function RotateRing({
   rotation,
   hovered,
   active,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
   const displayColor = active
     ? GIZMO_COLORS.HOVER
     : hovered
@@ -34,9 +39,12 @@ export default function RotateRing({
 
   return (
     <group rotation={rotation}>
-      {/* Invisible enlarged interaction ring */}
+      {/* ====================================================== */}
+      {/* INTERACTION / HIT RING                                 */}
+      {/* ====================================================== */}
+
       <Torus
-        args={[1.2, 0.11, 12, 64]}
+        args={[1.2, 0.12, 12, 64]}
         onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
@@ -49,7 +57,10 @@ export default function RotateRing({
         />
       </Torus>
 
-      {/* Visible ring */}
+      {/* ====================================================== */}
+      {/* VISIBLE RING                                           */}
+      {/* ====================================================== */}
+
       <Torus args={[1.2, 0.025, 12, 64]}>
         <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Torus>

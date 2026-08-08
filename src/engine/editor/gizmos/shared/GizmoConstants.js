@@ -23,8 +23,14 @@ export const GIZMO_COLORS = {
   X: "#ff4d4d",
   Y: "#55ff55",
   Z: "#5599ff",
+
   CENTER: "#ffffff",
+
+  // General active/selected highlight.
   HOVER: "#ffff00",
+
+  // Softer rotate hover.
+  ROTATE_HOVER: "#d8d8d8",
 };
 
 export const GIZMO_SIZE = 1;

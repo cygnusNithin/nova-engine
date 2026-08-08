@@ -12,10 +12,15 @@ export default function MoveAxis({
   rotation,
   arrowPosition,
   highlighted,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
   const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
 
   const handlePointerDown = (event) => {
@@ -32,6 +37,10 @@ export default function MoveAxis({
 
   return (
     <group rotation={rotation}>
+      {/* ====================================================== */}
+      {/* LARGE INTERACTION REGION                              */}
+      {/* ====================================================== */}
+
       <mesh
         name={`MoveAxisHit:${axis}`}
         position={[0, 0.525, 0]}
@@ -39,7 +48,7 @@ export default function MoveAxis({
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <cylinderGeometry args={[0.1, 0.1, 1.05, 8]} />
+        <cylinderGeometry args={[0.13, 0.13, 1.05, 8]} />
 
         <meshBasicMaterial
           transparent
@@ -50,24 +59,19 @@ export default function MoveAxis({
         />
       </mesh>
 
-      <Cylinder
-        args={[0.02, 0.02, 0.8, 8]}
-        position={[0, 0.4, 0]}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-      >
+      {/* ====================================================== */}
+      {/* VISIBLE AXIS                                          */}
+      {/* ====================================================== */}
+
+      <Cylinder args={[0.02, 0.02, 0.8, 8]} position={[0, 0.4, 0]}>
         <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Cylinder>
 
-      <MoveArrow
-        color={displayColor}
-        position={arrowPosition}
-        axis={axis}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-      />
+      {/* ====================================================== */}
+      {/* VISIBLE ARROW                                         */}
+      {/* ====================================================== */}
+
+      <MoveArrow color={displayColor} position={arrowPosition} axis={axis} />
     </group>
   );
 }
