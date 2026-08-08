@@ -26,13 +26,23 @@ class EditorTransform {
   // ============================================================
 
   translate(delta) {
-    if (!this.entity || !delta) return;
+    if (!this.entity || !delta) {
+      return false;
+    }
 
     this.entity.transform.translate(delta.x, delta.y, delta.z);
+
+    return true;
   }
 
   translateAxis(axis, amount) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(amount)) {
+      return false;
+    }
 
     const position = this.entity.transform.position.clone();
 
@@ -50,16 +60,26 @@ class EditorTransform {
         break;
 
       default:
-        return;
+        return false;
     }
 
     this.entity.transform.setPosition(position.x, position.y, position.z);
+
+    return true;
   }
 
   setPosition(x, y, z) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     this.entity.transform.setPosition(x, y, z);
+
+    return true;
   }
 
   // ============================================================
@@ -70,7 +90,7 @@ class EditorTransform {
     if (!entity) {
       console.warn("[EditorTransform] setEntityPosition: missing entity");
 
-      return;
+      return false;
     }
 
     if (!entity.transform) {
@@ -79,7 +99,17 @@ class EditorTransform {
         entity,
       );
 
-      return;
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      console.warn("[EditorTransform] setEntityPosition: invalid position", {
+        x,
+        y,
+        z,
+      });
+
+      return false;
     }
 
     console.log("[EditorTransform] Position update", {
@@ -89,6 +119,8 @@ class EditorTransform {
     });
 
     entity.transform.setPosition(x, y, z);
+
+    return true;
   }
 
   // ============================================================
@@ -96,15 +128,35 @@ class EditorTransform {
   // ============================================================
 
   setRotation(x, y, z) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     this.entity.transform.setRotation(x, y, z);
+
+    return true;
   }
 
   rotate(delta) {
-    if (!this.entity || !delta) return;
+    if (!this.entity || !delta) {
+      return false;
+    }
+
+    if (
+      !Number.isFinite(delta.x) ||
+      !Number.isFinite(delta.y) ||
+      !Number.isFinite(delta.z)
+    ) {
+      return false;
+    }
 
     this.entity.transform.rotate(delta.x, delta.y, delta.z);
+
+    return true;
   }
 
   // ============================================================
@@ -112,11 +164,34 @@ class EditorTransform {
   // ============================================================
 
   setEntityRotation(entity, x, y, z) {
-    if (!entity) return;
+    if (!entity) {
+      console.warn("[EditorTransform] setEntityRotation: missing entity");
 
-    if (!entity.transform) return;
+      return false;
+    }
+
+    if (!entity.transform) {
+      console.warn(
+        "[EditorTransform] setEntityRotation: missing transform",
+        entity,
+      );
+
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      console.warn("[EditorTransform] setEntityRotation: invalid rotation", {
+        x,
+        y,
+        z,
+      });
+
+      return false;
+    }
 
     entity.transform.setRotation(x, y, z);
+
+    return true;
   }
 
   // ============================================================
@@ -124,15 +199,35 @@ class EditorTransform {
   // ============================================================
 
   setScale(x, y, z) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     this.entity.transform.setScale(x, y, z);
+
+    return true;
   }
 
   scaleBy(delta) {
-    if (!this.entity || !delta) return;
+    if (!this.entity || !delta) {
+      return false;
+    }
+
+    if (
+      !Number.isFinite(delta.x) ||
+      !Number.isFinite(delta.y) ||
+      !Number.isFinite(delta.z)
+    ) {
+      return false;
+    }
 
     this.entity.transform.scaleBy(delta.x, delta.y, delta.z);
+
+    return true;
   }
 
   // ============================================================
@@ -140,11 +235,21 @@ class EditorTransform {
   // ============================================================
 
   setEntityScale(entity, x, y, z) {
-    if (!entity) return;
+    if (!entity) {
+      return false;
+    }
 
-    if (!entity.transform) return;
+    if (!entity.transform) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     entity.transform.setScale(x, y, z);
+
+    return true;
   }
 }
 
