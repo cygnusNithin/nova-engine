@@ -6,7 +6,9 @@ import GizmoMoveController from "./GizmoMoveController";
 class GizmoDragController {
   constructor() {
     this.startPoint = new THREE.Vector3();
+
     this.currentPoint = new THREE.Vector3();
+
     this.delta = new THREE.Vector3();
   }
 
@@ -14,22 +16,45 @@ class GizmoDragController {
   // BEGIN DRAG
   // ============================================================
 
-  begin(axis, origin, plane, startPoint = origin) {
-    console.log("");
-    console.log("========================================");
-    console.log("========== DRAG BEGIN ==========");
-    console.log("========================================");
+  begin(
+    axis,
+    origin,
+    plane,
+    startPoint = origin,
+    pointerId = null,
+    pointerTarget = null,
+  ) {
+    if (GizmoState.dragging) {
+      console.warn("[GizmoDragController] Drag already active");
 
-    console.log("Axis:", axis);
-    console.log("Entity:", GizmoState.entity);
-    console.log("Origin:", origin);
-    console.log("Plane:", plane);
+      return false;
+    }
 
     if (!GizmoState.entity) {
-      console.warn("DRAG BEGIN FAILED: GizmoState.entity is null");
+      console.warn(
+        "[GizmoDragController] Cannot begin drag without selected entity",
+      );
 
-      return;
+      return false;
     }
+
+    if (!plane) {
+      console.warn("[GizmoDragController] Cannot begin drag without plane");
+
+      return false;
+    }
+
+    if (!startPoint) {
+      console.warn(
+        "[GizmoDragController] Cannot begin drag without start point",
+      );
+
+      return false;
+    }
+
+    // ------------------------------------------------------------
+    // GIZMO STATE
+    // ------------------------------------------------------------
 
     GizmoState.axis = axis;
 
@@ -37,9 +62,17 @@ class GizmoDragController {
 
     GizmoState.dragPlane = plane;
 
-    GizmoState.pointer = null;
+    GizmoState.pointer = startPoint.clone();
+
+    GizmoState.pointerId = pointerId;
+
+    GizmoState.pointerTarget = pointerTarget;
 
     GizmoState.dragging = true;
+
+    // ------------------------------------------------------------
+    // INTERNAL STATE
+    // ------------------------------------------------------------
 
     this.startPoint.copy(startPoint);
 
@@ -47,32 +80,48 @@ class GizmoDragController {
 
     this.delta.set(0, 0, 0);
 
+    // Reset movement controller for this drag transaction.
     GizmoMoveController.reset();
 
-    console.log("Drag started.");
-    console.log("GizmoState.entity:", GizmoState.entity);
-    console.log("GizmoState.axis:", GizmoState.axis);
-    console.log("GizmoState.dragging:", GizmoState.dragging);
-    console.log("Start Point:", this.startPoint);
+    console.log("[GizmoDragController] DRAG START", {
+      entity: GizmoState.entity?.name,
+      axis,
+      pointerId,
+      origin: GizmoState.dragOrigin.clone(),
+      startPoint: this.startPoint.clone(),
+    });
 
-    console.log("========================================");
-    console.log("");
+    return true;
   }
 
   // ============================================================
   // UPDATE
   // ============================================================
 
-  update(pointer) {
+  update(pointer, pointerId = null) {
     if (!GizmoState.dragging) {
       return null;
     }
 
-    if (!pointer) {
-      console.warn("DRAG UPDATE: Pointer intersection is null");
+    // ------------------------------------------------------------
+    // Pointer ownership
+    // ------------------------------------------------------------
 
+    if (
+      GizmoState.pointerId !== null &&
+      pointerId !== null &&
+      GizmoState.pointerId !== pointerId
+    ) {
       return null;
     }
+
+    if (!pointer) {
+      return null;
+    }
+
+    // ------------------------------------------------------------
+    // Update pointer
+    // ------------------------------------------------------------
 
     this.currentPoint.copy(pointer);
 
@@ -87,15 +136,61 @@ class GizmoDragController {
   // END
   // ============================================================
 
-  end() {
-    console.log("");
-    console.log("========== DRAG END ==========");
+  end(pointerId = null) {
+    if (!GizmoState.dragging) {
+      return false;
+    }
 
-    console.log("Final Axis:", GizmoState.axis);
-    console.log("Final Pointer:", GizmoState.pointer);
-    console.log("Final Delta:", this.delta);
+    // ------------------------------------------------------------
+    // Pointer ownership
+    // ------------------------------------------------------------
+
+    if (
+      GizmoState.pointerId !== null &&
+      pointerId !== null &&
+      GizmoState.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    console.log("[GizmoDragController] DRAG END", {
+      entity: GizmoState.entity?.name,
+      axis: GizmoState.axis,
+      pointerId: GizmoState.pointerId,
+      finalDelta: this.delta.clone(),
+    });
+
+    // ------------------------------------------------------------
+    // Release pointer capture
+    // ------------------------------------------------------------
+
+    const target = GizmoState.pointerTarget;
+
+    if (target) {
+      try {
+        if (
+          typeof target.hasPointerCapture === "function" &&
+          target.hasPointerCapture(GizmoState.pointerId)
+        ) {
+          target.releasePointerCapture(GizmoState.pointerId);
+        }
+      } catch (error) {
+        console.warn(
+          "[GizmoDragController] Failed to release pointer capture",
+          error,
+        );
+      }
+    }
+
+    // ------------------------------------------------------------
+    // Reset movement controller
+    // ------------------------------------------------------------
 
     GizmoMoveController.reset();
+
+    // ------------------------------------------------------------
+    // Reset gizmo drag state
+    // ------------------------------------------------------------
 
     GizmoState.dragging = false;
 
@@ -107,13 +202,35 @@ class GizmoDragController {
 
     GizmoState.pointer = null;
 
+    GizmoState.pointerId = null;
+
+    GizmoState.pointerTarget = null;
+
+    // ------------------------------------------------------------
+    // Reset internal state
+    // ------------------------------------------------------------
+
     this.startPoint.set(0, 0, 0);
 
     this.currentPoint.set(0, 0, 0);
 
     this.delta.set(0, 0, 0);
 
-    console.log("Dragging:", GizmoState.dragging);
+    return true;
+  }
+
+  // ============================================================
+  // CANCEL
+  // ============================================================
+
+  cancel(pointerId = null) {
+    if (!GizmoState.dragging) {
+      return false;
+    }
+
+    console.log("[GizmoDragController] DRAG CANCEL");
+
+    return this.end(pointerId);
   }
 
   // ============================================================
@@ -130,6 +247,14 @@ class GizmoDragController {
 
   isDragging() {
     return GizmoState.dragging;
+  }
+
+  // ============================================================
+  // GET POINTER ID
+  // ============================================================
+
+  getPointerId() {
+    return GizmoState.pointerId;
   }
 }
 
