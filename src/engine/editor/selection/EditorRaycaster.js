@@ -10,6 +10,20 @@ import GizmoController from "../gizmos/GizmoController";
 
 import EntityManager from "../../entity/EntityManager";
 
+function isGizmoObject(object) {
+  let current = object;
+
+  while (current) {
+    if (current.userData?.gizmo) {
+      return true;
+    }
+
+    current = current.parent;
+  }
+
+  return false;
+}
+
 export default function EditorRaycaster() {
   const { camera, scene } = useThree();
 
@@ -19,25 +33,13 @@ export default function EditorRaycaster() {
 
   useEffect(() => {
     function onPointerDown(event) {
-      // ==========================================================
-      // LEFT MOUSE BUTTON ONLY
-      // ==========================================================
-
       if (event.button !== 0) {
         return;
       }
 
-      // ==========================================================
-      // TRANSFORM LOCK
-      // ==========================================================
-
       if (GizmoController.isTransforming()) {
         return;
       }
-
-      // ==========================================================
-      // IGNORE NOVA EDITOR UI
-      // ==========================================================
 
       const target = event.target;
 
@@ -47,10 +49,6 @@ export default function EditorRaycaster() {
       ) {
         return;
       }
-
-      // ==========================================================
-      // POINTER -> NDC
-      // ==========================================================
 
       const rect = event.target?.getBoundingClientRect?.();
 
@@ -67,15 +65,7 @@ export default function EditorRaycaster() {
         pointer.current.y = -((event.clientY / window.innerHeight) * 2 - 1);
       }
 
-      // ==========================================================
-      // UPDATE RAY
-      // ==========================================================
-
       raycaster.current.setFromCamera(pointer.current, camera);
-
-      // ==========================================================
-      // COLLECT RAYCASTABLE MESHES
-      // ==========================================================
 
       const meshes = [];
 
@@ -88,51 +78,43 @@ export default function EditorRaycaster() {
           return;
         }
 
+        if (object.type === "Sky" || object.type === "Sky2") {
+          return;
+        }
+
         meshes.push(object);
       });
 
-      // ==========================================================
-      // RAYCAST
-      // ==========================================================
-
       const intersects = raycaster.current.intersectObjects(meshes, false);
 
-      const hits = intersects.filter((hit) => {
-        const object = hit.object;
-
-        if (!object) {
-          return false;
-        }
-
-        if (object.userData.ignoreRaycast) {
-          return false;
-        }
-
-        if (object.type === "Sky" || object.type === "Sky2") {
-          return false;
-        }
-
-        return true;
-      });
-
-      // ==========================================================
-      // NOTHING HIT
-      // ==========================================================
-
-      if (!hits.length) {
+      if (!intersects.length) {
         EditorSelection.clearSelection();
 
         return;
       }
 
-      // ==========================================================
+      // ========================================================
+      // GIZMO OWNS THIS CLICK
+      // ========================================================
+
+      const nearestHit = intersects[0];
+
+      if (nearestHit?.object && isGizmoObject(nearestHit.object)) {
+        return;
+      }
+
+      // ========================================================
       // FIND ENTITY
-      // ==========================================================
+      // ========================================================
 
       let selectedEntity = null;
 
-      for (const hit of hits) {
+      for (const hit of intersects) {
         let object = hit.object;
+
+        if (isGizmoObject(object)) {
+          continue;
+        }
 
         while (object) {
           if (object.userData?.entity) {
@@ -159,19 +141,11 @@ export default function EditorRaycaster() {
         }
       }
 
-      // ==========================================================
-      // NO ENTITY
-      // ==========================================================
-
       if (!selectedEntity) {
         EditorSelection.clearSelection();
 
         return;
       }
-
-      // ==========================================================
-      // SELECT
-      // ==========================================================
 
       EditorSelection.selectEntity(selectedEntity);
     }

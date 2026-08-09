@@ -12,18 +12,10 @@ class GizmoDragController {
 
     this.delta = new THREE.Vector3();
 
-    // ------------------------------------------------------------
-    // Transform snapshot
-    // ------------------------------------------------------------
-
     this.originalPosition = new THREE.Vector3();
 
     this.hasTransformSnapshot = false;
   }
-
-  // ============================================================
-  // BEGIN
-  // ============================================================
 
   begin(
     axis,
@@ -43,11 +35,7 @@ class GizmoDragController {
 
     const entity = GizmoState.entity;
 
-    if (!entity) {
-      return false;
-    }
-
-    if (!entity.transform) {
+    if (!entity?.transform) {
       return false;
     }
 
@@ -55,17 +43,9 @@ class GizmoDragController {
       return false;
     }
 
-    // ----------------------------------------------------------
-    // Capture transform BEFORE movement
-    // ----------------------------------------------------------
-
     this.originalPosition.copy(entity.transform.position);
 
     this.hasTransformSnapshot = true;
-
-    // ----------------------------------------------------------
-    // Gizmo state
-    // ----------------------------------------------------------
 
     GizmoState.axis = axis;
 
@@ -81,18 +61,7 @@ class GizmoDragController {
 
     GizmoState.dragging = true;
 
-    /*
-     * IMPORTANT:
-     *
-     * Move is a real transform operation.
-     * Therefore Move must participate in the same
-     * transform lock as Rotate and Scale.
-     */
     GizmoState.transforming = true;
-
-    // ----------------------------------------------------------
-    // Internal drag state
-    // ----------------------------------------------------------
 
     this.startPoint.copy(startPoint);
 
@@ -104,10 +73,6 @@ class GizmoDragController {
 
     return true;
   }
-
-  // ============================================================
-  // UPDATE
-  // ============================================================
 
   update(pointer, pointerId = null) {
     if (!GizmoState.dragging) {
@@ -135,10 +100,6 @@ class GizmoDragController {
     return this.delta.clone();
   }
 
-  // ============================================================
-  // END / COMMIT
-  // ============================================================
-
   end(pointerId = null) {
     if (!GizmoState.dragging) {
       return false;
@@ -163,10 +124,6 @@ class GizmoDragController {
     return true;
   }
 
-  // ============================================================
-  // CANCEL / RESTORE
-  // ============================================================
-
   cancel(pointerId = null) {
     if (!GizmoState.dragging) {
       return false;
@@ -184,7 +141,7 @@ class GizmoDragController {
 
     const entity = GizmoState.entity;
 
-    if (entity && entity.transform && this.hasTransformSnapshot) {
+    if (entity?.transform && this.hasTransformSnapshot) {
       entity.transform.setPosition(
         this.originalPosition.x,
         this.originalPosition.y,
@@ -200,10 +157,6 @@ class GizmoDragController {
 
     return true;
   }
-
-  // ============================================================
-  // POINTER CAPTURE
-  // ============================================================
 
   releasePointerCapture() {
     const target = GizmoState.pointerTarget;
@@ -226,19 +179,11 @@ class GizmoDragController {
     }
   }
 
-  // ============================================================
-  // TRANSFORM SNAPSHOT
-  // ============================================================
-
   clearTransformSnapshot() {
     this.originalPosition.set(0, 0, 0);
 
     this.hasTransformSnapshot = false;
   }
-
-  // ============================================================
-  // RESET
-  // ============================================================
 
   resetState() {
     GizmoState.dragging = false;
@@ -256,17 +201,7 @@ class GizmoDragController {
     GizmoState.pointerId = null;
 
     GizmoState.pointerTarget = null;
-
-    this.startPoint.set(0, 0, 0);
-
-    this.currentPoint.set(0, 0, 0);
-
-    this.delta.set(0, 0, 0);
   }
-
-  // ============================================================
-  // GETTERS
-  // ============================================================
 
   getDelta() {
     return this.delta.clone();
@@ -282,6 +217,10 @@ class GizmoDragController {
 
   getAxis() {
     return GizmoState.axis;
+  }
+
+  getEntity() {
+    return GizmoState.entity;
   }
 }
 

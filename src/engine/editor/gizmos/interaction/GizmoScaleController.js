@@ -18,13 +18,21 @@ class GizmoScaleController {
 
     this.startPoint = new THREE.Vector3();
 
+    this.delta = new THREE.Vector3();
+
+    this.nextScale = new THREE.Vector3();
+
     this.scaleAxis = new THREE.Vector3();
 
     this.screenAxis = new THREE.Vector3();
 
+    this.cameraQuaternion = new THREE.Quaternion();
+
     this.pointerId = null;
 
     this.pointerTarget = null;
+
+    this.dragPlane = null;
 
     this.initialized = false;
   }
@@ -38,6 +46,7 @@ class GizmoScaleController {
     axis,
     startPoint,
     camera,
+    plane,
     pointerId = null,
     pointerTarget = null,
   ) {
@@ -45,7 +54,7 @@ class GizmoScaleController {
       return false;
     }
 
-    if (!startPoint || !camera) {
+    if (!startPoint || !camera || !plane) {
       return false;
     }
 
@@ -69,22 +78,44 @@ class GizmoScaleController {
 
     this.currentPoint.copy(startPoint);
 
+    this.delta.set(0, 0, 0);
+
     this.pointerId = pointerId;
 
     this.pointerTarget = pointerTarget;
 
+    this.dragPlane = plane;
+
+    this.cameraQuaternion.copy(
+      camera.getWorldQuaternion(this.cameraQuaternion),
+    );
+
     this.screenAxis
       .set(0, 1, 0)
-      .applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()))
+      .applyQuaternion(this.cameraQuaternion)
       .normalize();
 
-    this.scaleAxis.copy(this.getAxisVector(axis) ?? this.screenAxis);
+    if (axis === "xyz") {
+      this.scaleAxis.copy(this.screenAxis);
+    } else {
+      const axisVector = this.getAxisVector(axis);
+
+      if (!axisVector) {
+        this.reset();
+
+        return false;
+      }
+
+      this.scaleAxis.copy(axisVector);
+    }
 
     this.initialized = true;
 
     GizmoState.transforming = true;
 
     GizmoState.axis = axis;
+
+    GizmoState.dragPlane = plane;
 
     return true;
   }
@@ -120,38 +151,29 @@ class GizmoScaleController {
 
     this.currentPoint.copy(currentPoint);
 
-    const delta = new THREE.Vector3().subVectors(
-      this.currentPoint,
-      this.startPoint,
-    );
+    this.delta.subVectors(this.currentPoint, this.startPoint);
 
-    let amount;
-
-    if (axis === "xyz") {
-      amount = delta.dot(this.screenAxis);
-    } else {
-      amount = delta.dot(this.scaleAxis);
-    }
+    const amount = this.delta.dot(this.scaleAxis);
 
     const factor = Math.max(0.01, 1 + amount);
 
-    const nextScale = this.startScale.clone();
+    this.nextScale.copy(this.startScale);
 
     if (axis === "xyz") {
-      nextScale.multiplyScalar(factor);
+      this.nextScale.multiplyScalar(factor);
     } else if (axis === "x") {
-      nextScale.x = Math.max(0.01, this.startScale.x * factor);
+      this.nextScale.x = Math.max(0.01, this.startScale.x * factor);
     } else if (axis === "y") {
-      nextScale.y = Math.max(0.01, this.startScale.y * factor);
+      this.nextScale.y = Math.max(0.01, this.startScale.y * factor);
     } else if (axis === "z") {
-      nextScale.z = Math.max(0.01, this.startScale.z * factor);
+      this.nextScale.z = Math.max(0.01, this.startScale.z * factor);
     }
 
     EditorTransform.setEntityScale(
       entity,
-      nextScale.x,
-      nextScale.y,
-      nextScale.z,
+      this.nextScale.x,
+      this.nextScale.y,
+      this.nextScale.z,
     );
 
     return true;
@@ -251,19 +273,24 @@ class GizmoScaleController {
 
     this.startPoint.set(0, 0, 0);
 
+    this.delta.set(0, 0, 0);
+
+    this.nextScale.set(1, 1, 1);
+
     this.scaleAxis.set(0, 0, 0);
 
     this.screenAxis.set(0, 1, 0);
+
+    this.cameraQuaternion.identity();
 
     this.pointerId = null;
 
     this.pointerTarget = null;
 
+    this.dragPlane = null;
+
     this.initialized = false;
 
-    /*
-     * Scale owns the drag plane.
-     */
     GizmoState.dragPlane = null;
 
     GizmoState.transforming = false;
@@ -304,6 +331,14 @@ class GizmoScaleController {
 
   getAxis() {
     return this.axis;
+  }
+
+  getEntity() {
+    return this.entity;
+  }
+
+  getDragPlane() {
+    return this.dragPlane;
   }
 
   getPointerId() {

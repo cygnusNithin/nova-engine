@@ -9,28 +9,19 @@ import useEngineStore from "../../../store/engineStore";
 import GizmoController from "./GizmoController";
 
 import GizmoHoverController from "./interaction/GizmoHoverController";
-
 import GizmoDragController from "./interaction/GizmoDragController";
-
 import GizmoDragPlane from "./interaction/GizmoDragPlane";
-
 import GizmoRaycaster from "./interaction/GizmoRaycaster";
-
 import GizmoRotateController from "./interaction/GizmoRotateController";
-
 import GizmoScaleController from "./interaction/GizmoScaleController";
 
 import GizmoInteraction from "./interaction/GizmoInteraction";
 
 import MoveGizmo from "./Move/MoveGizmo";
-
 import RotateGizmo from "./Rotate/RotateGizmo";
-
 import ScaleGizmo from "./Scale/ScaleGizmo";
 
 import { GIZMO_MODES } from "./shared/GizmoConstants";
-
-import GizmoState from "./GizmoState";
 
 export default function GizmoManager() {
   const selectedEntity = useEngineStore((state) => state.editor.selectedEntity);
@@ -54,7 +45,6 @@ export default function GizmoManager() {
 
     if (!selectedEntity) {
       GizmoController.clear();
-
       GizmoHoverController.clear();
 
       return;
@@ -76,7 +66,27 @@ export default function GizmoManager() {
   }, [gizmoMode]);
 
   // ============================================================
-  // END / CANCEL
+  // POINTER CAPTURE
+  // ============================================================
+
+  const capturePointer = (pointerTarget, pointerId) => {
+    if (!pointerTarget || pointerId === null || pointerId === undefined) {
+      return;
+    }
+
+    if (typeof pointerTarget.setPointerCapture !== "function") {
+      return;
+    }
+
+    try {
+      pointerTarget.setPointerCapture(pointerId);
+    } catch {
+      // Pointer capture may already belong to another target.
+    }
+  };
+
+  // ============================================================
+  // END TRANSFORM
   // ============================================================
 
   const endActiveTransform = (pointerId = null) => {
@@ -93,11 +103,14 @@ export default function GizmoManager() {
     }
 
     setActiveAxis(null);
-
     setHoveredAxis(null);
 
     GizmoHoverController.clear();
   };
+
+  // ============================================================
+  // CANCEL TRANSFORM
+  // ============================================================
 
   const cancelActiveTransform = (pointerId = null) => {
     if (GizmoDragController.isDragging()) {
@@ -113,7 +126,6 @@ export default function GizmoManager() {
     }
 
     setActiveAxis(null);
-
     setHoveredAxis(null);
 
     GizmoHoverController.clear();
@@ -196,21 +208,9 @@ export default function GizmoManager() {
 
     const nativeEvent = event.nativeEvent;
 
-    const pointerId = nativeEvent?.pointerId ?? event.pointerId;
+    const pointerId = nativeEvent?.pointerId ?? event.pointerId ?? null;
 
-    const pointerTarget = nativeEvent?.target ?? event.target;
-
-    if (
-      pointerTarget &&
-      typeof pointerTarget.setPointerCapture === "function" &&
-      pointerId !== undefined
-    ) {
-      try {
-        pointerTarget.setPointerCapture(pointerId);
-      } catch {
-        // Pointer capture may already belong elsewhere.
-      }
-    }
+    const pointerTarget = nativeEvent?.target ?? event.target ?? null;
 
     // ==========================================================
     // MOVE
@@ -251,8 +251,9 @@ export default function GizmoManager() {
         return;
       }
 
-      setActiveAxis(axis);
+      capturePointer(pointerTarget, pointerId);
 
+      setActiveAxis(axis);
       setHoveredAxis(axis);
 
       return;
@@ -310,8 +311,9 @@ export default function GizmoManager() {
         return;
       }
 
-      setActiveAxis(axis);
+      capturePointer(pointerTarget, pointerId);
 
+      setActiveAxis(axis);
       setHoveredAxis(axis);
 
       return;
@@ -348,6 +350,7 @@ export default function GizmoManager() {
         axis,
         startPoint,
         camera,
+        plane,
         pointerId,
         pointerTarget,
       );
@@ -356,13 +359,7 @@ export default function GizmoManager() {
         return;
       }
 
-      /*
-       * Scale owns the transform.
-       *
-       * Do NOT start GizmoDragController here.
-       * GizmoDragController belongs to Move.
-       */
-      GizmoState.dragPlane = plane;
+      capturePointer(pointerTarget, pointerId);
 
       setActiveAxis(axis);
       setHoveredAxis(axis);
@@ -380,7 +377,9 @@ export default function GizmoManager() {
       return;
     }
 
-    setHoveredAxis(axis);
+    if (hoveredAxis !== axis) {
+      setHoveredAxis(axis);
+    }
 
     GizmoController.setHovered(axis);
 
@@ -424,7 +423,6 @@ export default function GizmoManager() {
       {gizmoMode === GIZMO_MODES.MOVE && (
         <MoveGizmo
           entity={selectedEntity}
-          hoveredAxis={hoveredAxis}
           activeAxis={activeAxis}
           isHighlighted={isHighlighted}
           onPointerDown={handlePointerDown}
@@ -438,7 +436,6 @@ export default function GizmoManager() {
           entity={selectedEntity}
           hoveredAxis={hoveredAxis}
           activeAxis={activeAxis}
-          isHighlighted={isHighlighted}
           onPointerDown={handlePointerDown}
           onPointerOver={handlePointerOver}
           onPointerOut={handlePointerOut}

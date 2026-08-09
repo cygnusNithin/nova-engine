@@ -1,7 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
 
-import GizmoState from "../GizmoState";
-
 import GizmoRaycaster from "./GizmoRaycaster";
 import GizmoDragPlane from "./GizmoDragPlane";
 import GizmoDragController from "./GizmoDragController";
@@ -13,9 +11,9 @@ export default function GizmoInteraction() {
   const { camera, pointer } = useThree();
 
   useFrame(() => {
-    // ============================================================
+    // ==========================================================
     // ROTATE
-    // ============================================================
+    // ==========================================================
 
     if (GizmoRotateController.isRotating()) {
       const entity = GizmoRotateController.getEntity();
@@ -52,12 +50,12 @@ export default function GizmoInteraction() {
       return;
     }
 
-    // ============================================================
+    // ==========================================================
     // SCALE
-    // ============================================================
+    // ==========================================================
 
     if (GizmoScaleController.isScaling()) {
-      const entity = GizmoState.entity;
+      const entity = GizmoScaleController.getEntity();
 
       if (!entity) {
         GizmoScaleController.cancel();
@@ -67,7 +65,7 @@ export default function GizmoInteraction() {
 
       const axis = GizmoScaleController.getAxis();
 
-      const plane = GizmoState.dragPlane;
+      const plane = GizmoScaleController.getDragPlane();
 
       if (!plane || !axis) {
         return;
@@ -89,9 +87,9 @@ export default function GizmoInteraction() {
       return;
     }
 
-    // ============================================================
+    // ==========================================================
     // MOVE
-    // ============================================================
+    // ==========================================================
 
     if (!GizmoDragController.isDragging()) {
       return;
@@ -118,7 +116,11 @@ export default function GizmoInteraction() {
       return;
     }
 
-    GizmoMoveController.move(GizmoState.entity, GizmoState.axis, delta);
+    GizmoMoveController.move(
+      GizmoDragController.getEntity(),
+      GizmoDragController.getAxis(),
+      delta,
+    );
   });
 
   return null;

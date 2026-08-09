@@ -8,6 +8,7 @@ import { GIZMO_AXIS, GIZMO_COLORS } from "../shared/GizmoConstants";
 
 export default function ScaleGizmo({
   entity,
+  activeAxis,
   isHighlighted,
   onPointerDown,
   onPointerOver,
@@ -23,12 +24,24 @@ export default function ScaleGizmo({
     group.current.position.copy(entity.transform.position);
   });
 
+  const isHidden = (axis) => {
+    return activeAxis !== null && activeAxis !== axis;
+  };
+
+  const centerHidden = activeAxis !== null && activeAxis !== GIZMO_AXIS.XYZ;
+
   return (
-    <group ref={group} name="ScaleGizmo" scale={[2.5, 2.5, 2.5]}>
+    <group
+      ref={group}
+      name="ScaleGizmo"
+      userData={{ gizmo: true }}
+      scale={[2.5, 2.5, 2.5]}
+    >
       <ScaleAxis
         axis={GIZMO_AXIS.X}
         color={GIZMO_COLORS.X}
         highlighted={isHighlighted(GIZMO_AXIS.X)}
+        hidden={isHidden(GIZMO_AXIS.X)}
         rotation={[0, 0, -Math.PI / 2]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -39,6 +52,7 @@ export default function ScaleGizmo({
         axis={GIZMO_AXIS.Y}
         color={GIZMO_COLORS.Y}
         highlighted={isHighlighted(GIZMO_AXIS.Y)}
+        hidden={isHidden(GIZMO_AXIS.Y)}
         rotation={[0, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -49,6 +63,7 @@ export default function ScaleGizmo({
         axis={GIZMO_AXIS.Z}
         color={GIZMO_COLORS.Z}
         highlighted={isHighlighted(GIZMO_AXIS.Z)}
+        hidden={isHidden(GIZMO_AXIS.Z)}
         rotation={[Math.PI / 2, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -59,6 +74,7 @@ export default function ScaleGizmo({
         axis={GIZMO_AXIS.XYZ}
         color={GIZMO_COLORS.CENTER}
         highlighted={isHighlighted(GIZMO_AXIS.XYZ)}
+        hidden={centerHidden}
         position={[0, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}

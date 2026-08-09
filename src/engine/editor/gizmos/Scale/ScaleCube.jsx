@@ -1,4 +1,5 @@
 import { Box } from "@react-three/drei";
+import * as THREE from "three";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
 
@@ -9,10 +10,15 @@ export default function ScaleCube({
   color,
   position,
   highlighted,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
   const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
 
   const handlePointerDown = (event) => {
@@ -24,18 +30,54 @@ export default function ScaleCube({
   };
 
   const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
+    onPointerOut?.(event);
   };
 
   return (
-    <Box
-      args={[0.18, 0.18, 0.18]}
-      position={position}
-      onPointerDown={handlePointerDown}
-      onPointerOver={handlePointerOver}
-      onPointerOut={handlePointerOut}
-    >
-      <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
-    </Box>
+    <>
+      {/* ====================================================== */}
+      {/* CENTER HIT AREA                                        */}
+      {/* ====================================================== */}
+
+      <mesh
+        name="ScaleCenterHit"
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
+        position={position}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <boxGeometry args={[0.28, 0.28, 0.28]} />
+
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* ====================================================== */}
+      {/* VISIBLE CENTER / XYZ HANDLE                            */}
+      {/* ====================================================== */}
+
+      <Box
+        args={[0.18, 0.18, 0.18]}
+        position={position}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
+      </Box>
+    </>
   );
 }

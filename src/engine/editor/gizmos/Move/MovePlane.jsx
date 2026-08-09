@@ -13,10 +13,15 @@ export default function MovePlane({
   hitPosition,
   rotation,
   highlighted,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
   const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
 
   const handlePointerDown = (event) => {
@@ -28,12 +33,27 @@ export default function MovePlane({
   };
 
   const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
+    onPointerOut?.(event);
   };
 
   return (
     <>
-      <mesh position={visualPosition} rotation={rotation}>
+      {/* ====================================================== */}
+      {/* VISIBLE PLANE                                         */}
+      {/* ====================================================== */}
+
+      <mesh
+        name={`MovePlane:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
+        position={visualPosition}
+        rotation={rotation}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
         <planeGeometry args={[visualSize, visualSize]} />
 
         <primitive
@@ -42,8 +62,16 @@ export default function MovePlane({
         />
       </mesh>
 
+      {/* ====================================================== */}
+      {/* LARGE PLANE HIT AREA                                   */}
+      {/* ====================================================== */}
+
       <mesh
         name={`MovePlaneHit:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
         position={hitPosition}
         rotation={rotation}
         onPointerDown={handlePointerDown}

@@ -39,7 +39,12 @@ export default function MoveGizmo({
   };
 
   return (
-    <group ref={group} name="MoveGizmo" scale={[2.5, 2.5, 2.5]}>
+    <group
+      ref={group}
+      name="MoveGizmo"
+      userData={{ gizmo: true }}
+      scale={[2.5, 2.5, 2.5]}
+    >
       <MoveAxis
         axis={GIZMO_AXIS.X}
         color={GIZMO_COLORS.X}
@@ -76,7 +81,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* XY */}
+      {/* ====================================================== */}
+      {/* XY                                                      */}
+      {/* ====================================================== */}
+
       <MovePlane
         axis={GIZMO_AXIS.XY}
         color={GIZMO_COLORS.X}
@@ -91,7 +99,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* XZ */}
+      {/* ====================================================== */}
+      {/* XZ                                                      */}
+      {/* ====================================================== */}
+
       <MovePlane
         axis={GIZMO_AXIS.XZ}
         color={GIZMO_COLORS.Y}
@@ -107,7 +118,10 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* YZ */}
+      {/* ====================================================== */}
+      {/* YZ                                                      */}
+      {/* ====================================================== */}
+
       <MovePlane
         axis={GIZMO_AXIS.YZ}
         color={GIZMO_COLORS.Z}

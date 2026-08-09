@@ -88,35 +88,16 @@ class EditorTransform {
 
   setEntityPosition(entity, x, y, z) {
     if (!entity) {
-      console.warn("[EditorTransform] setEntityPosition: missing entity");
-
       return false;
     }
 
     if (!entity.transform) {
-      console.warn(
-        "[EditorTransform] setEntityPosition: missing transform",
-        entity,
-      );
-
       return false;
     }
 
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-      console.warn("[EditorTransform] setEntityPosition: invalid position", {
-        x,
-        y,
-        z,
-      });
-
       return false;
     }
-
-    console.log("[EditorTransform] Position update", {
-      entity: entity.name,
-      from: entity.transform.position.clone(),
-      to: { x, y, z },
-    });
 
     entity.transform.setPosition(x, y, z);
 
@@ -165,27 +146,14 @@ class EditorTransform {
 
   setEntityRotation(entity, x, y, z) {
     if (!entity) {
-      console.warn("[EditorTransform] setEntityRotation: missing entity");
-
       return false;
     }
 
     if (!entity.transform) {
-      console.warn(
-        "[EditorTransform] setEntityRotation: missing transform",
-        entity,
-      );
-
       return false;
     }
 
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-      console.warn("[EditorTransform] setEntityRotation: invalid rotation", {
-        x,
-        y,
-        z,
-      });
-
       return false;
     }
 

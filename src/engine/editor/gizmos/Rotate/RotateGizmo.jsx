@@ -1,5 +1,6 @@
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import * as THREE from "three";
 
 import RotateRing from "./RotateRing";
 
@@ -15,6 +16,8 @@ export default function RotateGizmo({
 }) {
   const group = useRef();
 
+  const [sphereHovered, setSphereHovered] = useState(false);
+
   useFrame(() => {
     if (!group.current || !entity?.transform) {
       return;
@@ -27,8 +30,52 @@ export default function RotateGizmo({
     return activeAxis !== null && activeAxis !== axis;
   };
 
+  const showSphereHover =
+    sphereHovered && hoveredAxis === null && activeAxis === null;
+
   return (
-    <group ref={group} name="RotateGizmo" scale={[2.5, 2.5, 2.5]}>
+    <group
+      ref={group}
+      name="RotateGizmo"
+      userData={{ gizmo: true }}
+      scale={[2.5, 2.5, 2.5]}
+    >
+      {/* ====================================================== */}
+      {/* OUTER SPHERICAL HOVER AREA                             */}
+      {/* ====================================================== */}
+
+      <mesh
+        name="RotateGizmoHoverSphere"
+        userData={{
+          gizmo: true,
+          gizmoSurface: "rotateSphere",
+        }}
+        onPointerOver={() => {
+          if (activeAxis === null) {
+            setSphereHovered(true);
+          }
+        }}
+        onPointerOut={() => {
+          setSphereHovered(false);
+        }}
+      >
+        <sphereGeometry args={[1.36, 32, 20]} />
+
+        <meshBasicMaterial
+          transparent
+          opacity={showSphereHover ? 0.09 : 0}
+          color={GIZMO_COLORS.ROTATE_HOVER}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* ====================================================== */}
+      {/* X RING                                                  */}
+      {/* ====================================================== */}
+
       <RotateRing
         axis={GIZMO_AXIS.X}
         color={GIZMO_COLORS.X}
@@ -41,6 +88,10 @@ export default function RotateGizmo({
         onPointerOut={onPointerOut}
       />
 
+      {/* ====================================================== */}
+      {/* Y RING                                                  */}
+      {/* ====================================================== */}
+
       <RotateRing
         axis={GIZMO_AXIS.Y}
         color={GIZMO_COLORS.Y}
@@ -52,6 +103,10 @@ export default function RotateGizmo({
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
       />
+
+      {/* ====================================================== */}
+      {/* Z RING                                                  */}
+      {/* ====================================================== */}
 
       <RotateRing
         axis={GIZMO_AXIS.Z}
