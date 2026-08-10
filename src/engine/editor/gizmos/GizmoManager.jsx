@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { useThree } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 
 import * as THREE from "three";
 
@@ -36,6 +36,26 @@ export default function GizmoManager() {
   const [hoveredAxis, setHoveredAxis] = useState(null);
 
   const [activeAxis, setActiveAxis] = useState(null);
+
+  // ============================================================
+  // CAMERA DIAGNOSTICS
+  // ============================================================
+
+  useFrame(() => {
+    GizmoDebug.observeCamera(
+      camera,
+      gizmoMode,
+      GizmoController.isTransforming(),
+    );
+  });
+
+  // ============================================================
+  // MODE DIAGNOSTICS
+  // ============================================================
+
+  useEffect(() => {
+    GizmoDebug.modeChanged(gizmoMode);
+  }, [gizmoMode]);
 
   // ============================================================
   // SELECTION
@@ -93,20 +113,33 @@ export default function GizmoManager() {
   // ============================================================
 
   const endActiveTransform = (pointerId = null) => {
+    const mode = gizmoMode;
+    const axis = GizmoState.axis;
+
     if (GizmoDragController.isDragging()) {
       GizmoDragController.end(pointerId);
+
+      GizmoDebug.transformEnd(mode, axis);
     }
 
     if (GizmoRotateController.isRotating()) {
       GizmoRotateController.end(pointerId);
+
+      GizmoDebug.transformEnd(mode, axis);
     }
 
     if (GizmoScaleController.isScaling()) {
       GizmoScaleController.end(pointerId);
+
+      GizmoDebug.transformEnd(mode, axis);
     }
 
     setActiveAxis(null);
     setHoveredAxis(null);
+
+    GizmoState.transforming = false;
+    GizmoState.axis = null;
+    GizmoState.hoveredAxis = null;
 
     GizmoHoverController.clear();
   };
@@ -116,20 +149,33 @@ export default function GizmoManager() {
   // ============================================================
 
   const cancelActiveTransform = (pointerId = null) => {
+    const mode = gizmoMode;
+    const axis = GizmoState.axis;
+
     if (GizmoDragController.isDragging()) {
       GizmoDragController.cancel(pointerId);
+
+      GizmoDebug.transformCancel(mode, axis);
     }
 
     if (GizmoRotateController.isRotating()) {
       GizmoRotateController.cancel(pointerId);
+
+      GizmoDebug.transformCancel(mode, axis);
     }
 
     if (GizmoScaleController.isScaling()) {
       GizmoScaleController.cancel(pointerId);
+
+      GizmoDebug.transformCancel(mode, axis);
     }
 
     setActiveAxis(null);
     setHoveredAxis(null);
+
+    GizmoState.transforming = false;
+    GizmoState.axis = null;
+    GizmoState.hoveredAxis = null;
 
     GizmoHoverController.clear();
   };
@@ -200,12 +246,25 @@ export default function GizmoManager() {
     }
 
     if (GizmoController.isTransforming()) {
+      GizmoDebug.pointerBlocked?.({
+        mode: gizmoMode,
+        axis,
+        reason: "already-transforming",
+      });
+
       return;
     }
 
     const object = selectedEntity?.getObject?.();
 
     if (!object) {
+      GizmoDebug.pointerBlocked?.({
+        mode: gizmoMode,
+        axis,
+        reason: "selected-object-missing",
+        entity: selectedEntity,
+      });
+
       return;
     }
 
@@ -214,6 +273,20 @@ export default function GizmoManager() {
     const pointerId = nativeEvent?.pointerId ?? event.pointerId ?? null;
 
     const pointerTarget = nativeEvent?.target ?? event.target ?? null;
+
+    // ==========================================================
+    // POINTER DOWN DIAGNOSTIC
+    // ==========================================================
+
+    GizmoDebug.pointerDown?.({
+      mode: gizmoMode,
+      axis,
+      event,
+      selectedEntity,
+      object,
+      pointerId,
+      pointerTarget,
+    });
 
     // ==========================================================
     // MOVE
@@ -228,6 +301,12 @@ export default function GizmoManager() {
       );
 
       if (!plane) {
+        GizmoDebug.transformRejected?.({
+          mode: "move",
+          axis,
+          reason: "drag-plane-build-failed",
+        });
+
         return;
       }
 
@@ -238,6 +317,12 @@ export default function GizmoManager() {
       );
 
       if (!startPoint) {
+        GizmoDebug.transformRejected?.({
+          mode: "move",
+          axis,
+          reason: "start-plane-intersection-failed",
+        });
+
         return;
       }
 
@@ -251,6 +336,12 @@ export default function GizmoManager() {
       );
 
       if (!started) {
+        GizmoDebug.transformRejected?.({
+          mode: "move",
+          axis,
+          reason: "move-controller-rejected",
+        });
+
         return;
       }
 
@@ -278,6 +369,12 @@ export default function GizmoManager() {
 
     if (gizmoMode === GIZMO_MODES.ROTATE) {
       if (axis !== "x" && axis !== "y" && axis !== "z") {
+        GizmoDebug.transformRejected?.({
+          mode: "rotate",
+          axis,
+          reason: "invalid-rotation-axis",
+        });
+
         return;
       }
 
@@ -307,6 +404,12 @@ export default function GizmoManager() {
       );
 
       if (!startPoint) {
+        GizmoDebug.transformRejected?.({
+          mode: "rotate",
+          axis,
+          reason: "rotation-plane-intersection-failed",
+        });
+
         return;
       }
 
@@ -321,6 +424,12 @@ export default function GizmoManager() {
       );
 
       if (!started) {
+        GizmoDebug.transformRejected?.({
+          mode: "rotate",
+          axis,
+          reason: "rotate-controller-rejected",
+        });
+
         return;
       }
 
@@ -355,6 +464,12 @@ export default function GizmoManager() {
       );
 
       if (!plane) {
+        GizmoDebug.transformRejected?.({
+          mode: "scale",
+          axis,
+          reason: "scale-drag-plane-build-failed",
+        });
+
         return;
       }
 
@@ -365,6 +480,12 @@ export default function GizmoManager() {
       );
 
       if (!startPoint) {
+        GizmoDebug.transformRejected?.({
+          mode: "scale",
+          axis,
+          reason: "scale-start-plane-intersection-failed",
+        });
+
         return;
       }
 
@@ -379,6 +500,12 @@ export default function GizmoManager() {
       );
 
       if (!started) {
+        GizmoDebug.transformRejected?.({
+          mode: "scale",
+          axis,
+          reason: "scale-controller-rejected",
+        });
+
         return;
       }
 
@@ -486,9 +613,9 @@ export default function GizmoManager() {
           entity={selectedEntity}
           hoveredAxis={hoveredAxis}
           activeAxis={activeAxis}
-          onPointerDown={handlePointerDown}
-          onPointerOver={handlePointerOver}
-          onPointerOut={handlePointerOut}
+          onPointerDown={onPointerDown}
+          onPointerOver={onPointerOver}
+          onPointerOut={onPointerOut}
         />
       )}
 
