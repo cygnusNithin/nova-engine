@@ -613,9 +613,9 @@ export default function GizmoManager() {
           entity={selectedEntity}
           hoveredAxis={hoveredAxis}
           activeAxis={activeAxis}
-          onPointerDown={onPointerDown}
-          onPointerOver={onPointerOver}
-          onPointerOut={onPointerOut}
+          onPointerDown={handlePointerDown}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
         />
       )}
 
