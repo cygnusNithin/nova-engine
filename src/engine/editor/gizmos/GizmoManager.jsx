@@ -37,9 +37,11 @@ export default function GizmoManager() {
 
   const [activeAxis, setActiveAxis] = useState(null);
 
-  // ============================================================
-  // CAMERA DIAGNOSTICS
-  // ============================================================
+  /*
+   * ============================================================
+   * CAMERA DIAGNOSTICS
+   * ============================================================
+   */
 
   useFrame(() => {
     GizmoDebug.observeCamera(
@@ -49,17 +51,21 @@ export default function GizmoManager() {
     );
   });
 
-  // ============================================================
-  // MODE DIAGNOSTICS
-  // ============================================================
+  /*
+   * ============================================================
+   * MODE DIAGNOSTICS
+   * ============================================================
+   */
 
   useEffect(() => {
     GizmoDebug.modeChanged(gizmoMode);
   }, [gizmoMode]);
 
-  // ============================================================
-  // SELECTION
-  // ============================================================
+  /*
+   * ============================================================
+   * SELECTION
+   * ============================================================
+   */
 
   useEffect(() => {
     if (GizmoController.isTransforming()) {
@@ -76,9 +82,11 @@ export default function GizmoManager() {
     GizmoController.select(selectedEntity);
   }, [selectedEntity]);
 
-  // ============================================================
-  // MODE
-  // ============================================================
+  /*
+   * ============================================================
+   * MODE
+   * ============================================================
+   */
 
   useEffect(() => {
     if (GizmoController.isTransforming()) {
@@ -88,9 +96,11 @@ export default function GizmoManager() {
     GizmoController.setMode(gizmoMode);
   }, [gizmoMode]);
 
-  // ============================================================
-  // POINTER CAPTURE
-  // ============================================================
+  /*
+   * ============================================================
+   * POINTER CAPTURE
+   * ============================================================
+   */
 
   const capturePointer = (pointerTarget, pointerId) => {
     if (!pointerTarget || pointerId === null || pointerId === undefined) {
@@ -108,9 +118,11 @@ export default function GizmoManager() {
     }
   };
 
-  // ============================================================
-  // END TRANSFORM
-  // ============================================================
+  /*
+   * ============================================================
+   * END TRANSFORM
+   * ============================================================
+   */
 
   const endActiveTransform = (pointerId = null) => {
     const mode = gizmoMode;
@@ -144,9 +156,11 @@ export default function GizmoManager() {
     GizmoHoverController.clear();
   };
 
-  // ============================================================
-  // CANCEL TRANSFORM
-  // ============================================================
+  /*
+   * ============================================================
+   * CANCEL TRANSFORM
+   * ============================================================
+   */
 
   const cancelActiveTransform = (pointerId = null) => {
     const mode = gizmoMode;
@@ -180,9 +194,11 @@ export default function GizmoManager() {
     GizmoHoverController.clear();
   };
 
-  // ============================================================
-  // GLOBAL POINTER EVENTS
-  // ============================================================
+  /*
+   * ============================================================
+   * GLOBAL POINTER EVENTS
+   * ============================================================
+   */
 
   useEffect(() => {
     const handlePointerUp = (event) => {
@@ -222,21 +238,32 @@ export default function GizmoManager() {
 
       window.removeEventListener("blur", handleWindowBlur);
     };
-  }, []);
+  }, [gizmoMode]);
 
-  // ============================================================
-  // NO SELECTION
-  // ============================================================
+  /*
+   * ============================================================
+   * NO SELECTION
+   * ============================================================
+   */
 
   if (!selectedEntity) {
     return null;
   }
 
-  // ============================================================
-  // POINTER DOWN
-  // ============================================================
+  /*
+   * ============================================================
+   * POINTER DOWN
+   * ============================================================
+   */
 
   const handlePointerDown = (event, axis) => {
+    /*
+     * FIRST:
+     * Stop this pointer event from reaching scene/entity
+     * selection.
+     *
+     * This is critical for the Ground-selection problem.
+     */
     event.stopPropagation();
 
     event.nativeEvent?.stopPropagation();
@@ -262,7 +289,6 @@ export default function GizmoManager() {
         mode: gizmoMode,
         axis,
         reason: "selected-object-missing",
-        entity: selectedEntity,
       });
 
       return;
@@ -274,10 +300,6 @@ export default function GizmoManager() {
 
     const pointerTarget = nativeEvent?.target ?? event.target ?? null;
 
-    // ==========================================================
-    // POINTER DOWN DIAGNOSTIC
-    // ==========================================================
-
     GizmoDebug.pointerDown?.({
       mode: gizmoMode,
       axis,
@@ -288,9 +310,11 @@ export default function GizmoManager() {
       pointerTarget,
     });
 
-    // ==========================================================
-    // MOVE
-    // ==========================================================
+    /*
+     * ==========================================================
+     * MOVE
+     * ==========================================================
+     */
 
     if (gizmoMode === GIZMO_MODES.MOVE) {
       const plane = GizmoDragPlane.build(
@@ -363,9 +387,11 @@ export default function GizmoManager() {
       return;
     }
 
-    // ==========================================================
-    // ROTATE
-    // ==========================================================
+    /*
+     * ==========================================================
+     * ROTATE
+     * ==========================================================
+     */
 
     if (gizmoMode === GIZMO_MODES.ROTATE) {
       if (axis !== "x" && axis !== "y" && axis !== "z") {
@@ -451,9 +477,11 @@ export default function GizmoManager() {
       return;
     }
 
-    // ==========================================================
-    // SCALE
-    // ==========================================================
+    /*
+     * ==========================================================
+     * SCALE
+     * ==========================================================
+     */
 
     if (gizmoMode === GIZMO_MODES.SCALE) {
       const plane = GizmoDragPlane.build(
@@ -526,9 +554,11 @@ export default function GizmoManager() {
     }
   };
 
-  // ============================================================
-  // HOVER
-  // ============================================================
+  /*
+   * ============================================================
+   * HOVER
+   * ============================================================
+   */
 
   const handlePointerOver = (event, axis) => {
     event.stopPropagation();
@@ -550,16 +580,20 @@ export default function GizmoManager() {
     GizmoDebug.hover({
       mode: gizmoMode,
       axis,
+
       source:
         event.object?.userData?.gizmoType ?? event.object?.name ?? "unknown",
+
       event,
       selectedEntity,
     });
   };
 
-  // ============================================================
-  // HOVER OUT
-  // ============================================================
+  /*
+   * ============================================================
+   * HOVER OUT
+   * ============================================================
+   */
 
   const handlePointerOut = (event) => {
     event.stopPropagation();
@@ -581,17 +615,21 @@ export default function GizmoManager() {
     GizmoDebug.hoverClear();
   };
 
-  // ============================================================
-  // HIGHLIGHT
-  // ============================================================
+  /*
+   * ============================================================
+   * HIGHLIGHT
+   * ============================================================
+   */
 
   const isHighlighted = (axis) => {
     return hoveredAxis === axis || activeAxis === axis;
   };
 
-  // ============================================================
-  // RENDER
-  // ============================================================
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
 
   return (
     <>

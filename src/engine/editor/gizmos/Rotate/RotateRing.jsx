@@ -4,8 +4,13 @@ import GizmoMaterial from "../shared/GizmoMaterial";
 
 import { GIZMO_COLORS } from "../shared/GizmoConstants";
 
+const HIT_TUBE_RADIUS = 0.12;
+
+const VISUAL_TUBE_RADIUS = 0.022;
+
 export default function RotateRing({
   axis,
+  radius,
   color,
   rotation,
   hovered,
@@ -40,11 +45,11 @@ export default function RotateRing({
   return (
     <group rotation={rotation}>
       {/* ================================================== */}
-      {/* RING HIT AREA                                      */}
+      {/* RING HIT AREA                                     */}
       {/* ================================================== */}
 
       <Torus
-        args={[1.2, 0.18, 12, 64]}
+        args={[radius, HIT_TUBE_RADIUS, 12, 64]}
         name={`RotateRingHit:${axis}`}
         userData={{
           gizmo: true,
@@ -65,11 +70,11 @@ export default function RotateRing({
       </Torus>
 
       {/* ================================================== */}
-      {/* VISIBLE RING                                      */}
+      {/* VISIBLE RING                                     */}
       {/* ================================================== */}
 
       <Torus
-        args={[1.2, 0.022, 12, 64]}
+        args={[radius, VISUAL_TUBE_RADIUS, 12, 64]}
         raycast={() => null}
         userData={{
           gizmo: true,

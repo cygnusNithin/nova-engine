@@ -8,11 +8,21 @@ import RotateRing from "./RotateRing";
 
 import { GIZMO_AXIS, GIZMO_COLORS } from "../shared/GizmoConstants";
 
-const GIZMO_SCALE = 2;
+const GIZMO_SCALE = 1.6;
 
-const RING_RADIUS = 1.2;
+/*
+ * Shared rotation-ring radius.
+ *
+ * This value is now actually passed to RotateRing.
+ */
+const RING_RADIUS = 1.0;
 
-const HOVER_SPHERE_RADIUS = 1.28;
+/*
+ * Slightly larger than the visible ring.
+ *
+ * This is only the hover/selection sphere.
+ */
+const HOVER_SPHERE_RADIUS = 1.12;
 
 export default function RotateGizmo({
   entity,
@@ -24,15 +34,17 @@ export default function RotateGizmo({
 }) {
   const group = useRef();
 
-  const { camera } = useThree();
+  const { camera, pointer } = useThree();
 
   const [sphereHovered, setSphereHovered] = useState(false);
 
   const sphere = useRef(
-    new THREE.Sphere(new THREE.Vector3(), HOVER_SPHERE_RADIUS * GIZMO_SCALE),
+    new THREE.Sphere(new THREE.Vector3(), HOVER_SPHERE_RADIUS),
   );
 
   const hitPoint = useRef(new THREE.Vector3());
+
+  const raycaster = useRef(new THREE.Raycaster());
 
   useFrame(() => {
     if (!group.current || !entity?.transform) {
@@ -41,6 +53,9 @@ export default function RotateGizmo({
 
     group.current.position.copy(entity.transform.position);
 
+    /*
+     * Do not perform sphere hover checks while a ring is locked.
+     */
     if (activeAxis !== null) {
       if (sphereHovered) {
         setSphereHovered(false);
@@ -53,21 +68,17 @@ export default function RotateGizmo({
 
     sphere.current.radius = HOVER_SPHERE_RADIUS * GIZMO_SCALE;
 
-    const ray = camera.getWorldPosition(new THREE.Vector3());
+    /*
+     * Use the ACTUAL R3F pointer.
+     *
+     * Do not use camera.userData.__gizmoPointer.
+     */
+    raycaster.current.setFromCamera(pointer, camera);
 
-    void ray;
-
-    const raycaster = new THREE.Raycaster();
-
-    raycaster.setFromCamera(
-      camera.userData?.__gizmoPointer ?? {
-        x: 999,
-        y: 999,
-      },
-      camera,
+    const hit = raycaster.current.ray.intersectSphere(
+      sphere.current,
+      hitPoint.current,
     );
-
-    const hit = raycaster.ray.intersectSphere(sphere.current, hitPoint.current);
 
     const nextHovered = Boolean(hit);
 
@@ -94,7 +105,7 @@ export default function RotateGizmo({
       scale={[GIZMO_SCALE, GIZMO_SCALE, GIZMO_SCALE]}
     >
       {/* ================================================== */}
-      {/* HOVER SPHERE — VISUAL ONLY                        */}
+      {/* OUTER HOVER SPHERE                                */}
       {/* ================================================== */}
 
       <mesh
@@ -120,11 +131,12 @@ export default function RotateGizmo({
       </mesh>
 
       {/* ================================================== */}
-      {/* X RING                                             */}
+      {/* X RING                                            */}
       {/* ================================================== */}
 
       <RotateRing
         axis={GIZMO_AXIS.X}
+        radius={RING_RADIUS}
         color={GIZMO_COLORS.X}
         hovered={hoveredAxis === GIZMO_AXIS.X}
         active={activeAxis === GIZMO_AXIS.X}
@@ -136,11 +148,12 @@ export default function RotateGizmo({
       />
 
       {/* ================================================== */}
-      {/* Y RING                                             */}
+      {/* Y RING                                            */}
       {/* ================================================== */}
 
       <RotateRing
         axis={GIZMO_AXIS.Y}
+        radius={RING_RADIUS}
         color={GIZMO_COLORS.Y}
         hovered={hoveredAxis === GIZMO_AXIS.Y}
         active={activeAxis === GIZMO_AXIS.Y}
@@ -152,11 +165,12 @@ export default function RotateGizmo({
       />
 
       {/* ================================================== */}
-      {/* Z RING                                             */}
+      {/* Z RING                                            */}
       {/* ================================================== */}
 
       <RotateRing
         axis={GIZMO_AXIS.Z}
+        radius={RING_RADIUS}
         color={GIZMO_COLORS.Z}
         hovered={hoveredAxis === GIZMO_AXIS.Z}
         active={activeAxis === GIZMO_AXIS.Z}

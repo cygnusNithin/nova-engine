@@ -13,23 +13,22 @@ export default function GizmoInteraction() {
   const { camera, pointer } = useThree();
 
   useFrame(() => {
-    // ==========================================================
-    // ROTATE
-    // ==========================================================
+    /*
+     * ============================================================
+     * ROTATE
+     * ============================================================
+     */
 
     if (GizmoRotateController.isRotating()) {
       const entity = GizmoRotateController.getEntity();
 
       if (!entity) {
         GizmoRotateController.cancel();
-
         return;
       }
 
       const axis = GizmoRotateController.getAxis();
-
       const plane = GizmoRotateController.getRotationPlane();
-
       const center = GizmoRotateController.getRotationCenter();
 
       if (!axis || !plane || !center) {
@@ -52,31 +51,25 @@ export default function GizmoInteraction() {
       return;
     }
 
-    // ==========================================================
-    // SCALE
-    // ==========================================================
+    /*
+     * ============================================================
+     * SCALE
+     * ============================================================
+     */
 
     if (GizmoScaleController.isScaling()) {
       const entity = GizmoScaleController.getEntity();
 
       if (!entity) {
         GizmoScaleController.cancel();
-
         return;
       }
 
       const axis = GizmoScaleController.getAxis();
 
       /*
-       * SCALE DRAG PLANE OWNERSHIP
-       *
-       * GizmoState is the shared owner.
-       *
-       * Do not use:
-       *
-       * GizmoScaleController.getDragPlane()
+       * Scale owns the drag plane through GizmoState.
        */
-
       const plane = GizmoState.dragPlane;
 
       if (!plane || !axis) {
@@ -99,9 +92,11 @@ export default function GizmoInteraction() {
       return;
     }
 
-    // ==========================================================
-    // MOVE
-    // ==========================================================
+    /*
+     * ============================================================
+     * MOVE
+     * ============================================================
+     */
 
     if (!GizmoDragController.isDragging()) {
       return;

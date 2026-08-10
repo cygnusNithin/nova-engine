@@ -5,13 +5,26 @@ class GizmoDebug {
     this.enabled = true;
 
     this.lastHoverKey = null;
+
     this.lastCameraPosition = new THREE.Vector3();
+
     this.lastCameraQuaternion = new THREE.Quaternion();
 
     this.cameraInitialized = false;
 
     this.lastTransformState = false;
+
     this.lastMode = null;
+
+    this.lastPointerState = null;
+
+    this.lastHoverTime = 0;
+
+    this.hoverLogInterval = 100;
+
+    this.cameraLogInterval = 150;
+
+    this.lastCameraLogTime = 0;
   }
 
   setEnabled(enabled) {
@@ -39,13 +52,23 @@ class GizmoDebug {
       return;
     }
 
+    const now = performance.now();
+
     const hoverKey = `${mode}:${axis}:${source}`;
 
-    if (this.lastHoverKey === hoverKey) {
+    /*
+     * Don't spam DevTools if the pointer remains
+     * over the same gizmo object.
+     */
+    if (
+      this.lastHoverKey === hoverKey &&
+      now - this.lastHoverTime < this.hoverLogInterval
+    ) {
       return;
     }
 
     this.lastHoverKey = hoverKey;
+    this.lastHoverTime = now;
 
     const pointer = event?.pointer;
     const ray = event?.ray;
@@ -58,10 +81,21 @@ class GizmoDebug {
       mode,
       axis,
       source,
+
       object: object?.name ?? null,
+
       objectType: object?.type ?? null,
+
       gizmo: object?.userData?.gizmo ?? false,
+
+      gizmoHit: object?.userData?.gizmoHit ?? false,
+
+      gizmoVisual: object?.userData?.gizmoVisual ?? false,
+
       gizmoAxis: object?.userData?.gizmoAxis ?? null,
+
+      gizmoType: object?.userData?.gizmoType ?? null,
+
       selectedEntity:
         selectedEntity?.name ??
         selectedEntity?.id ??
@@ -71,6 +105,7 @@ class GizmoDebug {
 
     console.log("Pointer", {
       ndcX: pointer?.x ?? null,
+
       ndcY: pointer?.y ?? null,
     });
 
@@ -123,6 +158,56 @@ class GizmoDebug {
     console.log("[GizmoDebug] HOVER CLEAR");
   }
 
+  pointerDown({ mode, axis, event, selectedEntity, object, pointerId }) {
+    if (!this.enabled) {
+      return;
+    }
+
+    console.groupCollapsed(`[GizmoDebug] POINTER DOWN ${mode}:${axis}`);
+
+    console.log("Selection", {
+      selectedEntity:
+        selectedEntity?.name ??
+        selectedEntity?.id ??
+        selectedEntity?.uuid ??
+        null,
+
+      gizmoObject: object?.name ?? null,
+
+      gizmo: object?.userData?.gizmo ?? false,
+
+      gizmoHit: object?.userData?.gizmoHit ?? false,
+
+      gizmoAxis: object?.userData?.gizmoAxis ?? null,
+    });
+
+    console.log("Pointer", {
+      pointerId,
+
+      ndcX: event?.pointer?.x ?? null,
+
+      ndcY: event?.pointer?.y ?? null,
+    });
+
+    console.groupEnd();
+  }
+
+  pointerBlocked(data) {
+    if (!this.enabled) {
+      return;
+    }
+
+    console.warn("[GizmoDebug] POINTER BLOCKED", data);
+  }
+
+  transformRejected(data) {
+    if (!this.enabled) {
+      return;
+    }
+
+    console.warn("[GizmoDebug] TRANSFORM REJECTED", data);
+  }
+
   transformStart({ mode, axis, entity, pointerId }) {
     if (!this.enabled) {
       return;
@@ -136,6 +221,7 @@ class GizmoDebug {
       mode,
       axis,
       pointerId,
+
       entity: entity?.name ?? entity?.id ?? entity?.uuid ?? null,
     });
 
@@ -186,9 +272,18 @@ class GizmoDebug {
     }
 
     this.lastCameraPosition.copy(camera.position);
+
     this.lastCameraQuaternion.copy(camera.quaternion);
 
     this.cameraInitialized = true;
+
+    const now = performance.now();
+
+    if (now - this.lastCameraLogTime < this.cameraLogInterval) {
+      return;
+    }
+
+    this.lastCameraLogTime = now;
 
     console.log("[GizmoDebug] CAMERA CHANGE", {
       mode,

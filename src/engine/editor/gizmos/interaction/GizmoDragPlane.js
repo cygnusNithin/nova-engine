@@ -3,25 +3,32 @@ import * as THREE from "three";
 class GizmoDragPlane {
   constructor() {
     this.plane = new THREE.Plane();
+
+    this.axisDirection = new THREE.Vector3();
+    this.cameraRight = new THREE.Vector3();
+    this.cameraUp = new THREE.Vector3();
+    this.cameraDirection = new THREE.Vector3();
+
+    this.axisPlaneA = new THREE.Vector3();
+    this.axisPlaneB = new THREE.Vector3();
+
+    this.cameraQuaternion = new THREE.Quaternion();
   }
 
   build(axis, origin, camera, pointerRayDirection) {
+    if (!origin || !camera) {
+      return null;
+    }
+
     const normal = new THREE.Vector3();
-    const axisDirection = new THREE.Vector3();
+
+    /*
+     * ============================================================
+     * PLANE GIZMOS
+     * ============================================================
+     */
 
     switch (axis) {
-      case "x":
-        axisDirection.set(1, 0, 0);
-        break;
-
-      case "y":
-        axisDirection.set(0, 1, 0);
-        break;
-
-      case "z":
-        axisDirection.set(0, 0, 1);
-        break;
-
       case "xy":
         normal.set(0, 0, 1);
         break;
@@ -35,63 +42,132 @@ class GizmoDragPlane {
         break;
 
       default:
-        normal.copy(camera.getWorldDirection(new THREE.Vector3()));
         break;
     }
 
-    if (axisDirection.lengthSq() > 0) {
-      const cameraWorldQuaternion = camera.getWorldQuaternion(
-        new THREE.Quaternion(),
-      );
-      const cameraRight = new THREE.Vector3(1, 0, 0)
-        .applyQuaternion(cameraWorldQuaternion)
+    /*
+     * ============================================================
+     * AXIS GIZMOS
+     * ============================================================
+     */
+
+    if (normal.lengthSq() === 0) {
+      switch (axis) {
+        case "x":
+          this.axisDirection.set(1, 0, 0);
+          break;
+
+        case "y":
+          this.axisDirection.set(0, 1, 0);
+          break;
+
+        case "z":
+          this.axisDirection.set(0, 0, 1);
+          break;
+
+        default:
+          return null;
+      }
+
+      this.axisDirection.normalize();
+
+      camera.getWorldQuaternion(this.cameraQuaternion);
+
+      this.cameraRight
+        .set(1, 0, 0)
+        .applyQuaternion(this.cameraQuaternion)
         .normalize();
-      const cameraUp = new THREE.Vector3(0, 1, 0)
-        .applyQuaternion(cameraWorldQuaternion)
+
+      this.cameraUp
+        .set(0, 1, 0)
+        .applyQuaternion(this.cameraQuaternion)
         .normalize();
-      const rayDirection = pointerRayDirection?.clone().normalize();
-      const candidates = [
-        new THREE.Vector3().crossVectors(axisDirection, cameraRight),
-        new THREE.Vector3().crossVectors(axisDirection, cameraUp),
-      ];
+
+      camera.getWorldDirection(this.cameraDirection);
+      this.cameraDirection.normalize();
+
+      const pointerDirection = pointerRayDirection
+        ? pointerRayDirection.clone().normalize()
+        : this.cameraDirection.clone();
+
+      /*
+       * The drag plane must:
+       *
+       * 1. contain the selected axis
+       * 2. face the camera as much as practical
+       * 3. not become nearly parallel to the pointer ray
+       *
+       * Construct two planes containing the selected axis:
+       *
+       * axis × cameraRight
+       * axis × cameraUp
+       */
+
+      this.axisPlaneA
+        .crossVectors(this.axisDirection, this.cameraRight)
+        .normalize();
+
+      this.axisPlaneB
+        .crossVectors(this.axisDirection, this.cameraUp)
+        .normalize();
+
+      const candidates = [this.axisPlaneA, this.axisPlaneB];
 
       let bestNormal = null;
-      let bestScore = -1;
+      let bestScore = -Infinity;
 
-      candidates.forEach((candidate) => {
-        if (candidate.lengthSq() < 1e-6) {
-          return;
+      for (const candidate of candidates) {
+        if (candidate.lengthSq() < 1e-8) {
+          continue;
         }
 
-        candidate.normalize();
+        /*
+         * For a plane/ray intersection we want:
 
-        const score = rayDirection
-          ? Math.abs(candidate.dot(rayDirection))
-          : 0;
+         * |normal · ray| to be large.
+         *
+         * Near zero means the ray is almost parallel to the plane,
+         * producing unstable/very large intersection distances.
+         */
+        const rayAlignment = Math.abs(candidate.dot(pointerDirection));
+
+        /*
+         * Also prefer a plane whose normal faces the camera.
+         */
+        const cameraAlignment = Math.abs(candidate.dot(this.cameraDirection));
+
+        const score = rayAlignment * 0.75 + cameraAlignment * 0.25;
 
         if (score > bestScore) {
-          bestNormal = candidate;
           bestScore = score;
+          bestNormal = candidate.clone();
         }
-      });
+      }
 
-      if (!bestNormal || bestScore < 1e-6) {
-        // Exact axis-parallel pointer rays have no unique axis drag plane.
-        // Keep the plane valid with a deterministic axis-perpendicular normal.
-        const fallback =
-          Math.abs(axisDirection.y) < 0.9
-            ? new THREE.Vector3(0, 1, 0)
-            : new THREE.Vector3(1, 0, 0);
+      /*
+       * If the camera is looking almost exactly along the selected
+       * axis, both normal candidates can become poorly conditioned.
+       *
+       * Use a deterministic fallback.
+       */
+      if (!bestNormal || bestScore < 0.08) {
+        let fallback;
+
+        if (Math.abs(this.axisDirection.y) < 0.9) {
+          fallback.set(0, 1, 0);
+        } else {
+          fallback.set(1, 0, 0);
+        }
 
         bestNormal = new THREE.Vector3()
-          .crossVectors(axisDirection, fallback)
+          .crossVectors(this.axisDirection, fallback)
           .normalize();
       }
 
       normal.copy(bestNormal);
     }
 
-    this.plane.setFromNormalAndCoplanarPoint(normal, origin);
+    this.plane.setFromNormalAndCoplanarPoint(normal.normalize(), origin);
 
     return this.plane;
   }
