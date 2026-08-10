@@ -5,6 +5,7 @@ class GizmoDragPlane {
     this.plane = new THREE.Plane();
 
     this.axisDirection = new THREE.Vector3();
+
     this.cameraRight = new THREE.Vector3();
     this.cameraUp = new THREE.Vector3();
     this.cameraDirection = new THREE.Vector3();
@@ -13,6 +14,10 @@ class GizmoDragPlane {
     this.axisPlaneB = new THREE.Vector3();
 
     this.cameraQuaternion = new THREE.Quaternion();
+
+    // Reusable fallback vector.
+    // Important: this must be initialized before .set() is called.
+    this.fallback = new THREE.Vector3();
   }
 
   build(axis, origin, camera, pointerRayDirection) {
@@ -71,6 +76,12 @@ class GizmoDragPlane {
 
       this.axisDirection.normalize();
 
+      /*
+       * ----------------------------------------------------------
+       * CAMERA BASIS
+       * ----------------------------------------------------------
+       */
+
       camera.getWorldQuaternion(this.cameraQuaternion);
 
       this.cameraRight
@@ -86,21 +97,28 @@ class GizmoDragPlane {
       camera.getWorldDirection(this.cameraDirection);
       this.cameraDirection.normalize();
 
+      /*
+       * ----------------------------------------------------------
+       * POINTER RAY
+       * ----------------------------------------------------------
+       */
+
       const pointerDirection = pointerRayDirection
         ? pointerRayDirection.clone().normalize()
         : this.cameraDirection.clone();
 
       /*
-       * The drag plane must:
+       * ----------------------------------------------------------
+       * BUILD TWO POSSIBLE PLANES
+       * ----------------------------------------------------------
        *
-       * 1. contain the selected axis
-       * 2. face the camera as much as practical
-       * 3. not become nearly parallel to the pointer ray
-       *
-       * Construct two planes containing the selected axis:
+       * Both planes contain the selected axis.
        *
        * axis × cameraRight
        * axis × cameraUp
+       *
+       * We choose whichever gives the most stable
+       * ray/plane intersection.
        */
 
       this.axisPlaneA
@@ -122,18 +140,25 @@ class GizmoDragPlane {
         }
 
         /*
-         * For a plane/ray intersection we want:
-
-         * |normal · ray| to be large.
+         * --------------------------------------------------------
+         * RAY ALIGNMENT
+         * --------------------------------------------------------
          *
-         * Near zero means the ray is almost parallel to the plane,
-         * producing unstable/very large intersection distances.
+         * A larger absolute dot product means the ray intersects
+         * the plane more directly.
+         *
+         * A value near zero means the ray is almost parallel to
+         * the plane and produces unstable drag movement.
          */
+
         const rayAlignment = Math.abs(candidate.dot(pointerDirection));
 
         /*
-         * Also prefer a plane whose normal faces the camera.
+         * --------------------------------------------------------
+         * CAMERA ALIGNMENT
+         * --------------------------------------------------------
          */
+
         const cameraAlignment = Math.abs(candidate.dot(this.cameraDirection));
 
         const score = rayAlignment * 0.75 + cameraAlignment * 0.25;
@@ -145,29 +170,51 @@ class GizmoDragPlane {
       }
 
       /*
-       * If the camera is looking almost exactly along the selected
-       * axis, both normal candidates can become poorly conditioned.
+       * ----------------------------------------------------------
+       * FALLBACK
+       * ----------------------------------------------------------
        *
-       * Use a deterministic fallback.
+       * This is important when the camera is looking almost
+       * directly along the selected axis.
+       *
+       * Previously the code had:
+       *
+       *     let fallback;
+       *     fallback.set(...)
+       *
+       * which is invalid because fallback was undefined.
+       *
+       * We now reuse this.fallback.
        */
-      if (!bestNormal || bestScore < 0.08) {
-        let fallback;
 
+      if (!bestNormal || bestScore < 0.08) {
         if (Math.abs(this.axisDirection.y) < 0.9) {
-          fallback.set(0, 1, 0);
+          this.fallback.set(0, 1, 0);
         } else {
-          fallback.set(1, 0, 0);
+          this.fallback.set(1, 0, 0);
         }
 
         bestNormal = new THREE.Vector3()
-          .crossVectors(this.axisDirection, fallback)
+          .crossVectors(this.axisDirection, this.fallback)
           .normalize();
       }
 
       normal.copy(bestNormal);
     }
 
-    this.plane.setFromNormalAndCoplanarPoint(normal.normalize(), origin);
+    /*
+     * ============================================================
+     * FINAL PLANE
+     * ============================================================
+     */
+
+    if (normal.lengthSq() < 1e-8) {
+      return null;
+    }
+
+    normal.normalize();
+
+    this.plane.setFromNormalAndCoplanarPoint(normal, origin);
 
     return this.plane;
   }

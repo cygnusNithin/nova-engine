@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useFrame, useThree } from "@react-three/fiber";
 
@@ -68,6 +68,11 @@ export default function GizmoManager() {
    */
 
   useEffect(() => {
+    /*
+     * Do not allow selection changes while a gizmo operation
+     * is active.
+     */
+
     if (GizmoController.isTransforming()) {
       return;
     }
@@ -114,7 +119,9 @@ export default function GizmoManager() {
     try {
       pointerTarget.setPointerCapture(pointerId);
     } catch {
-      // Pointer capture may already belong to another target.
+      /*
+       * Pointer capture may already belong to another target.
+       */
     }
   };
 
@@ -124,37 +131,60 @@ export default function GizmoManager() {
    * ============================================================
    */
 
-  const endActiveTransform = (pointerId = null) => {
-    const mode = gizmoMode;
-    const axis = GizmoState.axis;
+  const endActiveTransform = useCallback(
+    (pointerId = null) => {
+      const mode = gizmoMode;
+      const axis = GizmoState.axis;
 
-    if (GizmoDragController.isDragging()) {
-      GizmoDragController.end(pointerId);
+      /*
+       * MOVE
+       */
 
-      GizmoDebug.transformEnd(mode, axis);
-    }
+      if (GizmoDragController.isDragging()) {
+        GizmoDragController.end(pointerId);
 
-    if (GizmoRotateController.isRotating()) {
-      GizmoRotateController.end(pointerId);
+        GizmoDebug.transformEnd(mode, axis);
+      }
 
-      GizmoDebug.transformEnd(mode, axis);
-    }
+      /*
+       * ROTATE
+       */
 
-    if (GizmoScaleController.isScaling()) {
-      GizmoScaleController.end(pointerId);
+      if (GizmoRotateController.isRotating()) {
+        GizmoRotateController.end(pointerId);
 
-      GizmoDebug.transformEnd(mode, axis);
-    }
+        GizmoDebug.transformEnd(mode, axis);
+      }
 
-    setActiveAxis(null);
-    setHoveredAxis(null);
+      /*
+       * SCALE
+       */
 
-    GizmoState.transforming = false;
-    GizmoState.axis = null;
-    GizmoState.hoveredAxis = null;
+      if (GizmoScaleController.isScaling()) {
+        GizmoScaleController.end(pointerId);
 
-    GizmoHoverController.clear();
-  };
+        GizmoDebug.transformEnd(mode, axis);
+      }
+
+      /*
+       * Clear React state.
+       */
+
+      setActiveAxis(null);
+      setHoveredAxis(null);
+
+      /*
+       * Clear shared gizmo state.
+       */
+
+      GizmoState.transforming = false;
+      GizmoState.axis = null;
+      GizmoState.hoveredAxis = null;
+
+      GizmoHoverController.clear();
+    },
+    [gizmoMode],
+  );
 
   /*
    * ============================================================
@@ -162,42 +192,69 @@ export default function GizmoManager() {
    * ============================================================
    */
 
-  const cancelActiveTransform = (pointerId = null) => {
-    const mode = gizmoMode;
-    const axis = GizmoState.axis;
+  const cancelActiveTransform = useCallback(
+    (pointerId = null) => {
+      const mode = gizmoMode;
+      const axis = GizmoState.axis;
 
-    if (GizmoDragController.isDragging()) {
-      GizmoDragController.cancel(pointerId);
+      /*
+       * MOVE
+       */
 
-      GizmoDebug.transformCancel(mode, axis);
-    }
+      if (GizmoDragController.isDragging()) {
+        GizmoDragController.cancel(pointerId);
 
-    if (GizmoRotateController.isRotating()) {
-      GizmoRotateController.cancel(pointerId);
+        GizmoDebug.transformCancel(mode, axis);
+      }
 
-      GizmoDebug.transformCancel(mode, axis);
-    }
+      /*
+       * ROTATE
+       */
 
-    if (GizmoScaleController.isScaling()) {
-      GizmoScaleController.cancel(pointerId);
+      if (GizmoRotateController.isRotating()) {
+        GizmoRotateController.cancel(pointerId);
 
-      GizmoDebug.transformCancel(mode, axis);
-    }
+        GizmoDebug.transformCancel(mode, axis);
+      }
 
-    setActiveAxis(null);
-    setHoveredAxis(null);
+      /*
+       * SCALE
+       */
 
-    GizmoState.transforming = false;
-    GizmoState.axis = null;
-    GizmoState.hoveredAxis = null;
+      if (GizmoScaleController.isScaling()) {
+        GizmoScaleController.cancel(pointerId);
 
-    GizmoHoverController.clear();
-  };
+        GizmoDebug.transformCancel(mode, axis);
+      }
+
+      /*
+       * Clear React state.
+       */
+
+      setActiveAxis(null);
+      setHoveredAxis(null);
+
+      /*
+       * Clear shared gizmo state.
+       */
+
+      GizmoState.transforming = false;
+      GizmoState.axis = null;
+      GizmoState.hoveredAxis = null;
+
+      GizmoHoverController.clear();
+    },
+    [gizmoMode],
+  );
 
   /*
    * ============================================================
    * GLOBAL POINTER EVENTS
    * ============================================================
+   *
+   * IMPORTANT:
+   * These functions are now useCallback functions, so the effect
+   * can safely depend on them.
    */
 
   useEffect(() => {
@@ -238,7 +295,7 @@ export default function GizmoManager() {
 
       window.removeEventListener("blur", handleWindowBlur);
     };
-  }, [gizmoMode]);
+  }, [gizmoMode, endActiveTransform, cancelActiveTransform]);
 
   /*
    * ============================================================
@@ -259,11 +316,12 @@ export default function GizmoManager() {
   const handlePointerDown = (event, axis) => {
     /*
      * FIRST:
-     * Stop this pointer event from reaching scene/entity
-     * selection.
+     * Stop the gizmo pointer event from reaching the scene/entity
+     * selection system.
      *
-     * This is critical for the Ground-selection problem.
+     * This is important for the Ground-selection problem.
      */
+
     event.stopPropagation();
 
     event.nativeEvent?.stopPropagation();
@@ -271,6 +329,11 @@ export default function GizmoManager() {
     if (event.button !== undefined && event.button !== 0) {
       return;
     }
+
+    /*
+     * Do not allow a second gizmo operation to begin while one
+     * is already active.
+     */
 
     if (GizmoController.isTransforming()) {
       GizmoDebug.pointerBlocked?.({
