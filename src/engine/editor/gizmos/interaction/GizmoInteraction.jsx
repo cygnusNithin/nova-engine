@@ -7,6 +7,8 @@ import GizmoMoveController from "./GizmoMoveController";
 import GizmoRotateController from "./GizmoRotateController";
 import GizmoScaleController from "./GizmoScaleController";
 
+import GizmoState from "../GizmoState";
+
 export default function GizmoInteraction() {
   const { camera, pointer } = useThree();
 
@@ -65,7 +67,17 @@ export default function GizmoInteraction() {
 
       const axis = GizmoScaleController.getAxis();
 
-      const plane = GizmoScaleController.getDragPlane();
+      /*
+       * SCALE DRAG PLANE OWNERSHIP
+       *
+       * GizmoState is the shared owner.
+       *
+       * Do not use:
+       *
+       * GizmoScaleController.getDragPlane()
+       */
+
+      const plane = GizmoState.dragPlane;
 
       if (!plane || !axis) {
         return;

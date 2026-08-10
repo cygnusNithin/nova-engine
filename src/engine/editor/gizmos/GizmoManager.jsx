@@ -23,6 +23,9 @@ import ScaleGizmo from "./Scale/ScaleGizmo";
 
 import { GIZMO_MODES } from "./shared/GizmoConstants";
 
+import GizmoState from "./GizmoState";
+import GizmoDebug from "./interaction/GizmoDebug";
+
 export default function GizmoManager() {
   const selectedEntity = useEngineStore((state) => state.editor.selectedEntity);
 
@@ -256,6 +259,16 @@ export default function GizmoManager() {
       setActiveAxis(axis);
       setHoveredAxis(axis);
 
+      GizmoState.transforming = true;
+      GizmoState.axis = axis;
+
+      GizmoDebug.transformStart({
+        mode: "move",
+        axis,
+        entity: selectedEntity,
+        pointerId,
+      });
+
       return;
     }
 
@@ -316,6 +329,16 @@ export default function GizmoManager() {
       setActiveAxis(axis);
       setHoveredAxis(axis);
 
+      GizmoState.transforming = true;
+      GizmoState.axis = axis;
+
+      GizmoDebug.transformStart({
+        mode: "rotate",
+        axis,
+        entity: selectedEntity,
+        pointerId,
+      });
+
       return;
     }
 
@@ -363,6 +386,16 @@ export default function GizmoManager() {
 
       setActiveAxis(axis);
       setHoveredAxis(axis);
+
+      GizmoState.transforming = true;
+      GizmoState.axis = axis;
+
+      GizmoDebug.transformStart({
+        mode: "scale",
+        axis,
+        entity: selectedEntity,
+        pointerId,
+      });
     }
   };
 
@@ -373,17 +406,28 @@ export default function GizmoManager() {
   const handlePointerOver = (event, axis) => {
     event.stopPropagation();
 
+    event.nativeEvent?.stopPropagation();
+
     if (GizmoController.isTransforming()) {
       return;
     }
 
-    if (hoveredAxis !== axis) {
-      setHoveredAxis(axis);
-    }
+    setHoveredAxis(axis);
+
+    GizmoState.hoveredAxis = axis;
 
     GizmoController.setHovered(axis);
 
     GizmoHoverController.enter(axis);
+
+    GizmoDebug.hover({
+      mode: gizmoMode,
+      axis,
+      source:
+        event.object?.userData?.gizmoType ?? event.object?.name ?? "unknown",
+      event,
+      selectedEntity,
+    });
   };
 
   // ============================================================
@@ -393,15 +437,21 @@ export default function GizmoManager() {
   const handlePointerOut = (event) => {
     event.stopPropagation();
 
+    event.nativeEvent?.stopPropagation();
+
     if (GizmoController.isTransforming()) {
       return;
     }
 
     setHoveredAxis(null);
 
+    GizmoState.hoveredAxis = null;
+
     GizmoController.clearHover();
 
     GizmoHoverController.leave();
+
+    GizmoDebug.hoverClear();
   };
 
   // ============================================================

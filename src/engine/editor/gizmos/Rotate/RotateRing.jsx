@@ -39,15 +39,18 @@ export default function RotateRing({
 
   return (
     <group rotation={rotation}>
-      {/* ====================================================== */}
-      {/* LARGE RING HIT AREA                                    */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* RING HIT AREA                                      */}
+      {/* ================================================== */}
 
       <Torus
-        args={[1.2, 0.14, 12, 64]}
+        args={[1.2, 0.18, 12, 64]}
+        name={`RotateRingHit:${axis}`}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "rotate-ring",
         }}
         onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
@@ -61,19 +64,18 @@ export default function RotateRing({
         />
       </Torus>
 
-      {/* ====================================================== */}
-      {/* VISIBLE RING                                           */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* VISIBLE RING                                      */}
+      {/* ================================================== */}
 
       <Torus
-        args={[1.2, 0.025, 12, 64]}
+        args={[1.2, 0.022, 12, 64]}
+        raycast={() => null}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoVisual: true,
         }}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
       >
         <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Torus>

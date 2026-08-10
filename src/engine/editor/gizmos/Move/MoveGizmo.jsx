@@ -8,8 +8,7 @@ import { GIZMO_COLORS, GIZMO_AXIS } from "../shared/GizmoConstants";
 
 const planeInnerOffset = 0.08;
 
-const visualPlaneSize = 0.32;
-
+const visualPlaneSize = 0.28;
 const hitPlaneSize = 0.42;
 
 const visualPlaneCenter = planeInnerOffset + visualPlaneSize / 2;
@@ -42,8 +41,11 @@ export default function MoveGizmo({
     <group
       ref={group}
       name="MoveGizmo"
-      userData={{ gizmo: true }}
-      scale={[2.5, 2.5, 2.5]}
+      userData={{
+        gizmo: true,
+        gizmoMode: "move",
+      }}
+      scale={[2, 2, 2]}
     >
       <MoveAxis
         axis={GIZMO_AXIS.X}
@@ -81,10 +83,6 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* ====================================================== */}
-      {/* XY                                                      */}
-      {/* ====================================================== */}
-
       <MovePlane
         axis={GIZMO_AXIS.XY}
         color={GIZMO_COLORS.X}
@@ -98,10 +96,6 @@ export default function MoveGizmo({
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
       />
-
-      {/* ====================================================== */}
-      {/* XZ                                                      */}
-      {/* ====================================================== */}
 
       <MovePlane
         axis={GIZMO_AXIS.XZ}
@@ -117,10 +111,6 @@ export default function MoveGizmo({
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
       />
-
-      {/* ====================================================== */}
-      {/* YZ                                                      */}
-      {/* ====================================================== */}
 
       <MovePlane
         axis={GIZMO_AXIS.YZ}

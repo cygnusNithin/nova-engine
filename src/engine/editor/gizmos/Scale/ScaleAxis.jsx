@@ -1,4 +1,5 @@
 import { Box, Cylinder } from "@react-three/drei";
+
 import * as THREE from "three";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
@@ -35,22 +36,24 @@ export default function ScaleAxis({
 
   return (
     <group rotation={rotation}>
-      {/* ====================================================== */}
-      {/* LARGE AXIS HIT AREA                                    */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* AXIS HIT AREA                                     */}
+      {/* ================================================== */}
 
       <mesh
         name={`ScaleAxisHit:${axis}`}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "scale-axis",
         }}
         position={[0, 0.45, 0]}
         onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <cylinderGeometry args={[0.14, 0.14, 0.95, 10]} />
+        <cylinderGeometry args={[0.16, 0.16, 0.95, 12]} />
 
         <meshBasicMaterial
           transparent
@@ -61,33 +64,34 @@ export default function ScaleAxis({
         />
       </mesh>
 
-      {/* ====================================================== */}
-      {/* VISIBLE AXIS                                           */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* VISIBLE AXIS                                      */}
+      {/* ================================================== */}
 
       <Cylinder
-        args={[0.025, 0.025, 0.9, 8]}
+        args={[0.022, 0.022, 0.9, 8]}
         position={[0, 0.45, 0]}
+        raycast={() => null}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoVisual: true,
         }}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
       >
         <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Cylinder>
 
-      {/* ====================================================== */}
-      {/* LARGE SCALE CUBE HIT AREA                              */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* SCALE CUBE HIT                                    */}
+      {/* ================================================== */}
 
       <mesh
         name={`ScaleCubeHit:${axis}`}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "scale-cube",
         }}
         position={[0, 0.95, 0]}
         onPointerDown={handlePointerDown}
@@ -105,20 +109,19 @@ export default function ScaleAxis({
         />
       </mesh>
 
-      {/* ====================================================== */}
-      {/* VISIBLE SCALE CUBE                                     */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* VISIBLE SCALE CUBE                                */}
+      {/* ================================================== */}
 
       <Box
-        args={[0.12, 0.12, 0.12]}
+        args={[0.1, 0.1, 0.1]}
         position={[0, 0.95, 0]}
+        raycast={() => null}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoVisual: true,
         }}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
       >
         <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Box>

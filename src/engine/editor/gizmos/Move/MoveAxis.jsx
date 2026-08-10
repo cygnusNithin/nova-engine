@@ -37,22 +37,24 @@ export default function MoveAxis({
 
   return (
     <group rotation={rotation}>
-      {/* ====================================================== */}
-      {/* LARGE AXIS HIT AREA                                    */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* POINTER HIT AREA — ONLY INTERACTIVE GEOMETRY      */}
+      {/* ================================================== */}
 
       <mesh
         name={`MoveAxisHit:${axis}`}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "move-axis",
         }}
         position={[0, 0.525, 0]}
         onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <cylinderGeometry args={[0.14, 0.14, 1.1, 10]} />
+        <cylinderGeometry args={[0.16, 0.16, 1.1, 12]} />
 
         <meshBasicMaterial
           transparent
@@ -63,36 +65,28 @@ export default function MoveAxis({
         />
       </mesh>
 
-      {/* ====================================================== */}
-      {/* VISIBLE AXIS                                           */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* VISIBLE AXIS — VISUAL ONLY                        */}
+      {/* ================================================== */}
 
       <Cylinder
-        args={[0.02, 0.02, 0.8, 8]}
+        args={[0.018, 0.018, 0.8, 8]}
         position={[0, 0.4, 0]}
+        raycast={() => null}
         userData={{
           gizmo: true,
           gizmoAxis: axis,
+          gizmoVisual: true,
         }}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
       >
         <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Cylinder>
 
-      {/* ====================================================== */}
-      {/* VISIBLE ARROW                                          */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
+      {/* VISIBLE ARROW — VISUAL ONLY                       */}
+      {/* ================================================== */}
 
-      <MoveArrow
-        color={displayColor}
-        position={arrowPosition}
-        axis={axis}
-        onPointerDown={onPointerDown}
-        onPointerOver={onPointerOver}
-        onPointerOut={onPointerOut}
-      />
+      <MoveArrow color={displayColor} position={arrowPosition} axis={axis} />
     </group>
   );
 }

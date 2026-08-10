@@ -34,8 +34,11 @@ export default function ScaleGizmo({
     <group
       ref={group}
       name="ScaleGizmo"
-      userData={{ gizmo: true }}
-      scale={[2.5, 2.5, 2.5]}
+      userData={{
+        gizmo: true,
+        gizmoMode: "scale",
+      }}
+      scale={[2, 2, 2]}
     >
       <ScaleAxis
         axis={GIZMO_AXIS.X}
