@@ -8,7 +8,7 @@ import GizmoDragController from "../gizmos/interaction/GizmoDragController";
 import EntityManager from "../../entity/EntityManager";
 
 export default function EditorRaycaster() {
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
 
   const raycaster = useRef(new THREE.Raycaster());
   const pointer = useRef(new THREE.Vector2());
@@ -45,19 +45,19 @@ export default function EditorRaycaster() {
       }
 
       // ============================================================
-      // POINTER -> NDC
+      // GET THE ACTUAL R3F CANVAS
       //
-      // IMPORTANT:
-      // Always calculate against the actual canvas element.
+      // DO NOT use event.target / closest("canvas") here.
+      //
+      // The global pointer listener can receive the event through
+      // another DOM target. R3F's gl.domElement is the authoritative
+      // renderer canvas.
       // ============================================================
 
-      const canvas =
-        target instanceof HTMLCanvasElement
-          ? target
-          : target?.closest?.("canvas");
+      const canvas = gl?.domElement;
 
       if (!canvas) {
-        console.warn("[EditorSelection] No canvas found for pointer.");
+        console.warn("[EditorSelection] R3F canvas unavailable.");
         return;
       }
 
@@ -66,6 +66,10 @@ export default function EditorRaycaster() {
       if (!rect.width || !rect.height) {
         return;
       }
+
+      // ============================================================
+      // POINTER -> NDC
+      // ============================================================
 
       pointer.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
 
@@ -149,6 +153,8 @@ export default function EditorRaycaster() {
       console.groupCollapsed("[EditorSelection] Pointer selection");
 
       console.log("Camera:", camera);
+
+      console.log("Canvas:", canvas);
 
       console.log("Pointer NDC:", {
         x: pointer.current.x,
@@ -282,7 +288,7 @@ export default function EditorRaycaster() {
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [camera, scene]);
+  }, [camera, scene, gl]);
 
   return null;
 }
