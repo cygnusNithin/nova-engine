@@ -14,6 +14,128 @@ export default function EditorRaycaster() {
   const pointer = useRef(new THREE.Vector2());
 
   useEffect(() => {
+    function isEditorObject(object) {
+      if (!object) {
+        return false;
+      }
+
+      const userData = object.userData || {};
+
+      return (
+        userData.gizmo === true ||
+        userData.isGizmo === true ||
+        userData.gizmoHandle === true ||
+        userData.gizmoRing === true ||
+        userData.gizmoAxis === true
+      );
+    }
+
+    function isGroundEntity(entity) {
+      if (!entity) {
+        return false;
+      }
+
+      return entity.type === "Ground" || entity.name === "Ground";
+    }
+
+    function findEntityFromObject(object) {
+      let current = object;
+
+      while (current) {
+        const userData = current.userData || {};
+
+        // ----------------------------------------------------------
+        // Never allow gizmo objects to resolve to an entity.
+        // ----------------------------------------------------------
+
+        if (isEditorObject(current)) {
+          return null;
+        }
+
+        // ----------------------------------------------------------
+        // Direct Entity reference.
+        // ----------------------------------------------------------
+
+        if (userData.entity) {
+          const entity = userData.entity;
+
+          if (!isGroundEntity(entity)) {
+            return {
+              entity,
+              object: current,
+            };
+          }
+
+          return null;
+        }
+
+        // ----------------------------------------------------------
+        // Entity UUID reference.
+        // ----------------------------------------------------------
+
+        if (userData.entityUUID) {
+          const entity = EntityManager.getByUUID(userData.entityUUID);
+
+          if (entity && !isGroundEntity(entity)) {
+            return {
+              entity,
+              object: current,
+            };
+          }
+
+          if (entity && isGroundEntity(entity)) {
+            return null;
+          }
+        }
+
+        // ----------------------------------------------------------
+        // Continue through the render hierarchy.
+        // ----------------------------------------------------------
+
+        current = current.parent;
+      }
+
+      return null;
+    }
+
+    function hasEditorAncestor(object) {
+      let current = object;
+
+      while (current) {
+        if (isEditorObject(current)) {
+          return true;
+        }
+
+        current = current.parent;
+      }
+
+      return false;
+    }
+
+    function isGroundObject(object) {
+      let current = object;
+
+      while (current) {
+        const userData = current.userData || {};
+
+        if (userData.entity) {
+          return isGroundEntity(userData.entity);
+        }
+
+        if (userData.entityUUID) {
+          const entity = EntityManager.getByUUID(userData.entityUUID);
+
+          if (entity) {
+            return isGroundEntity(entity);
+          }
+        }
+
+        current = current.parent;
+      }
+
+      return false;
+    }
+
     function onPointerDown(event) {
       // ============================================================
       // LEFT MOUSE ONLY
@@ -45,13 +167,7 @@ export default function EditorRaycaster() {
       }
 
       // ============================================================
-      // GET THE ACTUAL R3F CANVAS
-      //
-      // DO NOT use event.target / closest("canvas") here.
-      //
-      // The global pointer listener can receive the event through
-      // another DOM target. R3F's gl.domElement is the authoritative
-      // renderer canvas.
+      // R3F CANVAS
       // ============================================================
 
       const canvas = gl?.domElement;
@@ -82,7 +198,16 @@ export default function EditorRaycaster() {
       raycaster.current.setFromCamera(pointer.current, camera);
 
       // ============================================================
-      // COLLECT SELECTABLE MESHES
+      // COLLECT RENDERABLE MESHES
+      //
+      // IMPORTANT:
+      //
+      // Do NOT require entity metadata directly on the mesh.
+      //
+      // Building/Road/etc. store entity metadata on their root
+      // Group. Their actual meshes are children of that group.
+      //
+      // We raycast the mesh and resolve the Entity by walking upward.
       // ============================================================
 
       const meshes = [];
@@ -103,39 +228,30 @@ export default function EditorRaycaster() {
         }
 
         // ----------------------------------------------------------
-        // Gizmo geometry must NEVER participate in entity selection.
+        // Ignore gizmo meshes and meshes inside gizmo hierarchy.
         // ----------------------------------------------------------
 
-        if (
-          userData.gizmo === true ||
-          userData.isGizmo === true ||
-          userData.gizmoHandle === true ||
-          userData.gizmoRing === true ||
-          userData.gizmoAxis === true
-        ) {
+        if (hasEditorAncestor(object)) {
           return;
         }
 
         // ----------------------------------------------------------
-        // Ground is editor infrastructure, not a selectable entity.
+        // Ground is infrastructure, not selectable.
+        //
+        // We can identify it from the Entity root even though the
+        // actual ground mesh itself may not contain entity metadata.
         // ----------------------------------------------------------
 
-        if (
-          userData.entity?.type === "Ground" ||
-          userData.entity?.name === "Ground" ||
-          (userData.entityUUID &&
-            EntityManager.getByUUID(userData.entityUUID)?.type === "Ground")
-        ) {
+        if (isGroundObject(object)) {
           return;
         }
 
         // ----------------------------------------------------------
-        // Only objects belonging to a Nova Entity are selectable.
+        // Add every remaining mesh.
+        //
+        // Entity ownership is resolved after the raycast by walking
+        // from the hit mesh toward the root.
         // ----------------------------------------------------------
-
-        if (!userData.entity && !userData.entityUUID) {
-          return;
-        }
 
         meshes.push(object);
       });
@@ -170,7 +286,7 @@ export default function EditorRaycaster() {
       // ============================================================
 
       if (!hits.length) {
-        console.log("Result: nothing selectable under cursor.");
+        console.log("Result: nothing under cursor.");
 
         console.groupEnd();
 
@@ -181,61 +297,38 @@ export default function EditorRaycaster() {
 
       // ============================================================
       // FIND FIRST VALID ENTITY
+      //
+      // Important:
+      //
+      // Three.js may return a child mesh as the ray hit.
+      //
+      // We walk:
+      //
+      // Mesh
+      //   ↓
+      // Entity Group
+      //   ↓
+      // Scene
+      //
+      // and resolve the Entity from the first matching ancestor.
       // ============================================================
 
       let selectedEntity = null;
       let selectedObject = null;
+      let selectedHit = null;
 
       for (const hit of hits) {
-        let object = hit.object;
+        const result = findEntityFromObject(hit.object);
 
-        while (object) {
-          // --------------------------------------------------------
-          // Direct entity reference
-          // --------------------------------------------------------
-
-          if (object.userData?.entity) {
-            const entity = object.userData.entity;
-
-            // Ground is never selectable.
-            if (entity.type === "Ground" || entity.name === "Ground") {
-              object = object.parent;
-              continue;
-            }
-
-            selectedEntity = entity;
-            selectedObject = object;
-
-            break;
-          }
-
-          // --------------------------------------------------------
-          // Entity UUID reference
-          // --------------------------------------------------------
-
-          if (object.userData?.entityUUID) {
-            const entity = EntityManager.getByUUID(object.userData.entityUUID);
-
-            if (entity) {
-              // Ground is never selectable.
-              if (entity.type === "Ground" || entity.name === "Ground") {
-                object = object.parent;
-                continue;
-              }
-
-              selectedEntity = entity;
-              selectedObject = object;
-
-              break;
-            }
-          }
-
-          object = object.parent;
+        if (!result) {
+          continue;
         }
 
-        if (selectedEntity) {
-          break;
-        }
+        selectedEntity = result.entity;
+        selectedObject = result.object;
+        selectedHit = hit;
+
+        break;
       }
 
       // ============================================================
@@ -243,7 +336,11 @@ export default function EditorRaycaster() {
       // ============================================================
 
       if (!selectedEntity) {
-        console.log("Result: ray hit objects, but no selectable entity.");
+        console.log(
+          "Result: ray hit render objects, but no Nova Entity was found.",
+        );
+
+        console.log("Closest hit object:", hits[0]?.object);
 
         console.groupEnd();
 
@@ -263,12 +360,11 @@ export default function EditorRaycaster() {
         type: selectedEntity.type,
       });
 
-      console.log("Selected render object:", selectedObject);
+      console.log("Selected entity root:", selectedObject);
 
-      console.log(
-        "Hit distance:",
-        hits.find((hit) => hit.object === selectedObject)?.distance,
-      );
+      console.log("Hit mesh:", selectedHit?.object);
+
+      console.log("Hit distance:", selectedHit?.distance);
 
       console.groupEnd();
 
