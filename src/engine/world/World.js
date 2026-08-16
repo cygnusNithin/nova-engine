@@ -56,6 +56,10 @@ class World {
   destroy() {
     console.log("[World] Destroying...");
 
+    EntityManager.getAll().forEach((entity) => {
+      this.despawn(entity);
+    });
+
     SystemManager.destroy();
 
     EntityManager.clear();
@@ -99,11 +103,13 @@ class World {
 
     EntityManager.add(entity);
 
-    this.sceneGraph.add(entity);
+    if (!entity.parent) {
+      this.sceneGraph.add(entity);
+    }
 
     const object = entity.getObject();
 
-    if (object) {
+    if (object && !entity.parent) {
       SceneService.add(object);
     }
 
@@ -116,14 +122,25 @@ class World {
 
   despawn(entity) {
     if (!entity) {
-      return;
+      return false;
+    }
+
+    if (!EntityManager.getByUUID(entity.uuid)) {
+      return false;
     }
 
     console.log("[World] Despawning:", entity.name);
 
     const object = entity.getObject();
 
-    if (object) {
+    if (useEngineStore.getState().editor.selectedEntity === entity) {
+      useEngineStore.getState().clearSelection();
+      EventBus.emit(EngineEvents.ENTITY_DESELECTED);
+    }
+
+    if (entity.parent) {
+      entity.parent.remove(entity);
+    } else if (object) {
       SceneService.remove(object);
     }
 
@@ -136,6 +153,8 @@ class World {
     useEngineStore.getState().removeEntity(entity);
 
     EventBus.emit(EngineEvents.ENTITY_DESTROYED, entity);
+
+    return true;
   }
 
   // --------------------------------------------------

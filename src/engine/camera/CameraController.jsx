@@ -46,7 +46,7 @@ export default function CameraController() {
     if (mouse.deltaX || mouse.deltaY || mouse.wheel) {
       consumeMouseMotion();
     }
-  });
+  }, -1);
 
   return null;
 }

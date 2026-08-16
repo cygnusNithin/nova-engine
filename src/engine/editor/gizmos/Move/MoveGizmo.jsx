@@ -6,7 +6,7 @@ import MovePlane from "./MovePlane";
 
 import { GIZMO_COLORS, GIZMO_AXIS } from "../shared/GizmoConstants";
 
-const planeInnerOffset = 0.08;
+const planeInnerOffset = 0.2;
 
 const visualPlaneSize = 0.28;
 const hitPlaneSize = 0.42;

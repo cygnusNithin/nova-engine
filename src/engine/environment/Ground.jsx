@@ -37,6 +37,11 @@ export default function Ground({ position = [0, 0, 0] } = {}) {
 
     object.receiveShadow = true;
 
+    // Ground is an ordinary editor entity.  Keep it available to the
+    // editor raycaster so a click on the ground selects this entity rather
+    // than being treated as empty-space deselection.
+    object.userData.ignoreRaycast = false;
+
     // --------------------------------------------------
     // Position
     // --------------------------------------------------

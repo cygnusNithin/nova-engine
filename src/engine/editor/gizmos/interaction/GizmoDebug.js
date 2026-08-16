@@ -1,5 +1,6 @@
 import * as THREE from "three";
 
+
 class GizmoDebug {
   constructor() {
     this.enabled = true;
@@ -47,7 +48,7 @@ class GizmoDebug {
     });
   }
 
-  hover({ mode, axis, source, event, selectedEntity }) {
+  hover({ mode, axis, source, event, selectedEntity, camera = null }) {
     if (!this.enabled) {
       return;
     }
@@ -107,7 +108,13 @@ class GizmoDebug {
       ndcX: pointer?.x ?? null,
 
       ndcY: pointer?.y ?? null,
+
+      clientX: event?.nativeEvent?.clientX ?? null,
+
+      clientY: event?.nativeEvent?.clientY ?? null,
     });
+
+    this.logCameraAndEntity(camera ?? event?.camera, selectedEntity);
 
     console.log("Ray", {
       origin: ray?.origin
@@ -158,7 +165,16 @@ class GizmoDebug {
     console.log("[GizmoDebug] HOVER CLEAR");
   }
 
-  pointerDown({ mode, axis, event, selectedEntity, object, pointerId }) {
+  pointerDown({
+    mode,
+    axis,
+    event,
+    selectedEntity,
+    object,
+    pointerId,
+    camera = null,
+    ray = null,
+  }) {
     if (!this.enabled) {
       return;
     }
@@ -187,7 +203,18 @@ class GizmoDebug {
       ndcX: event?.pointer?.x ?? null,
 
       ndcY: event?.pointer?.y ?? null,
+
+      clientX: event?.nativeEvent?.clientX ?? null,
+
+      clientY: event?.nativeEvent?.clientY ?? null,
     });
+
+    console.log("Live ray", {
+      origin: this.toVectorRecord(ray?.origin),
+      direction: this.toVectorRecord(ray?.direction),
+    });
+
+    this.logCameraAndEntity(camera ?? event?.camera, selectedEntity);
 
     console.groupEnd();
   }
@@ -254,7 +281,7 @@ class GizmoDebug {
     });
   }
 
-  observeCamera(camera, mode, transforming = false) {
+  observeCamera(camera, mode, transforming = false, pointer = null, entity = null) {
     if (!this.enabled || !camera) {
       return;
     }
@@ -300,6 +327,52 @@ class GizmoDebug {
         y: Number(camera.rotation.y.toFixed(3)),
         z: Number(camera.rotation.z.toFixed(3)),
       },
+
+      pointer: pointer
+        ? {
+            ndcX: Number(pointer.x.toFixed(4)),
+            ndcY: Number(pointer.y.toFixed(4)),
+          }
+        : null,
+
+      selectedEntity: entity
+        ? {
+            name: entity.name ?? entity.id ?? entity.uuid ?? null,
+            position: this.toVectorRecord(entity.transform?.position),
+          }
+        : null,
+    });
+  }
+
+  toVectorRecord(vector) {
+    if (!vector) {
+      return null;
+    }
+
+    return {
+      x: Number(vector.x.toFixed(4)),
+      y: Number(vector.y.toFixed(4)),
+      z: Number(vector.z.toFixed(4)),
+    };
+  }
+
+  logCameraAndEntity(camera, entity) {
+    if (!camera || !entity?.transform) {
+      return;
+    }
+
+    camera.updateMatrixWorld(true);
+
+    const direction = new THREE.Vector3();
+    const projectedOrigin = entity.transform.position.clone().project(camera);
+
+    camera.getWorldDirection(direction);
+
+    console.log("Camera/entity alignment", {
+      cameraPosition: this.toVectorRecord(camera.position),
+      cameraDirection: this.toVectorRecord(direction),
+      entityPosition: this.toVectorRecord(entity.transform.position),
+      entityOriginNdc: this.toVectorRecord(projectedOrigin),
     });
   }
 }

@@ -149,7 +149,7 @@ export default function EditorRaycaster() {
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [camera, scene]);
+  }, [camera, scene, gl.domElement]);
 
   return null;
 }

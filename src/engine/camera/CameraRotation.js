@@ -1,11 +1,28 @@
 import * as THREE from "three";
 
-const target = new THREE.Vector3();
+const states = new WeakMap();
 
-let yaw = 0;
-let pitch = 0;
+function getState(camera) {
+    let state = states.get(camera);
 
-let initialized = false;
+    if (state) {
+        return state;
+    }
+
+    const direction = new THREE.Vector3();
+
+    camera.getWorldDirection(direction);
+
+    state = {
+        yaw: Math.atan2(direction.x, direction.z),
+        pitch: Math.asin(direction.y),
+        target: new THREE.Vector3(),
+    };
+
+    states.set(camera, state);
+
+    return state;
+}
 
 export function updateCameraRotation(
     camera,
@@ -13,47 +30,35 @@ export function updateCameraRotation(
     sensitivity
 ) {
 
-    if (!initialized) {
-
-    const direction = new THREE.Vector3();
-
-    camera.getWorldDirection(direction);
-
-    pitch = Math.asin(direction.y);
-
-    yaw = Math.atan2(direction.x, direction.z);
-
-    initialized = true;
-
-}
+    const state = getState(camera);
 
     // Left drag is reserved for selection and gizmo manipulation.
     if (!mouse.right)
         return;
 
-    yaw -= mouse.deltaX * sensitivity;
+    state.yaw -= mouse.deltaX * sensitivity;
 
-    pitch -= mouse.deltaY * sensitivity;
+    state.pitch -= mouse.deltaY * sensitivity;
 
     const limit = Math.PI / 2 - 0.01;
 
-    pitch = Math.max(
+    state.pitch = Math.max(
         -limit,
-        Math.min(limit, pitch)
+        Math.min(limit, state.pitch)
     );
 
-    target.set(
+    state.target.set(
 
-        Math.cos(pitch) * Math.sin(yaw),
+        Math.cos(state.pitch) * Math.sin(state.yaw),
 
-        Math.sin(pitch),
+        Math.sin(state.pitch),
 
-        Math.cos(pitch) * Math.cos(yaw)
+        Math.cos(state.pitch) * Math.cos(state.yaw)
 
     );
 
-    target.add(camera.position);
+    state.target.add(camera.position);
 
-    camera.lookAt(target);
+    camera.lookAt(state.target);
 
 }

@@ -31,7 +31,7 @@ export default function GizmoManager() {
 
   const gizmoMode = useEngineStore((state) => state.editor.gizmoMode);
 
-  const { camera } = useThree();
+  const { camera, pointer } = useThree();
 
   const [hoveredAxis, setHoveredAxis] = useState(null);
 
@@ -48,6 +48,8 @@ export default function GizmoManager() {
       camera,
       gizmoMode,
       GizmoController.isTransforming(),
+      pointer,
+      selectedEntity,
     );
   });
 
@@ -299,16 +301,6 @@ export default function GizmoManager() {
 
   /*
    * ============================================================
-   * NO SELECTION
-   * ============================================================
-   */
-
-  if (!selectedEntity) {
-    return null;
-  }
-
-  /*
-   * ============================================================
    * POINTER DOWN
    * ============================================================
    */
@@ -363,6 +355,18 @@ export default function GizmoManager() {
 
     const pointerTarget = nativeEvent?.target ?? event.target ?? null;
 
+    /*
+     * The DOM event may have arrived while the editor camera was moving.
+     * Rebuild the ray from the camera's current world matrix before choosing
+     * a drag plane. This keeps move and scale plane selection aligned with
+     * the same camera pose that R3F uses for the handle hit test.
+     */
+    camera.updateMatrixWorld(true);
+
+    const currentRay = GizmoRaycaster.update(camera, event.pointer);
+
+    const pointerRayDirection = currentRay?.direction ?? event.ray?.direction;
+
     GizmoDebug.pointerDown?.({
       mode: gizmoMode,
       axis,
@@ -371,6 +375,8 @@ export default function GizmoManager() {
       object,
       pointerId,
       pointerTarget,
+      camera,
+      ray: currentRay,
     });
 
     /*
@@ -384,7 +390,7 @@ export default function GizmoManager() {
         axis,
         object.position,
         camera,
-        event.ray.direction,
+        pointerRayDirection,
       );
 
       if (!plane) {
@@ -551,7 +557,7 @@ export default function GizmoManager() {
         axis,
         object.position,
         camera,
-        event.ray.direction,
+        pointerRayDirection,
       );
 
       if (!plane) {
@@ -649,6 +655,7 @@ export default function GizmoManager() {
 
       event,
       selectedEntity,
+      camera,
     });
   };
 
@@ -687,6 +694,10 @@ export default function GizmoManager() {
   const isHighlighted = (axis) => {
     return hoveredAxis === axis || activeAxis === axis;
   };
+
+  if (!selectedEntity) {
+    return null;
+  }
 
   /*
    * ============================================================

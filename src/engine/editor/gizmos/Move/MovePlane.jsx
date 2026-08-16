@@ -50,9 +50,7 @@ export default function MovePlane({
         }}
         position={visualPosition}
         rotation={rotation}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
+        raycast={() => null}
       >
         <planeGeometry args={[visualSize, visualSize]} />
 

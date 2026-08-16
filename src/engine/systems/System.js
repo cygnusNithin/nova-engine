@@ -30,10 +30,10 @@ export default class System {
 
     start() {}
 
-    update(delta) {}
+    update() {}
 
-    lateUpdate(delta) {}
+    lateUpdate() {}
 
-    fixedUpdate(delta) {}
+    fixedUpdate() {}
 
 }

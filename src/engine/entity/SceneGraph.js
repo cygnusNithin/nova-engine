@@ -12,6 +12,8 @@ export default class SceneGraph {
   add(entity) {
     if (!entity) return;
 
+    if (entity.parent) return;
+
     // Do not use root.add().
     //
     // The root is only the SceneGraph container.
@@ -43,7 +45,15 @@ export default class SceneGraph {
   //--------------------------------------------------
 
   traverse(callback) {
+    const visited = new Set();
+
     const walk = (node) => {
+      if (visited.has(node)) {
+        return;
+      }
+
+      visited.add(node);
+
       callback(node);
 
       node.children.forEach(walk);

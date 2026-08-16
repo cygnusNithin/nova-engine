@@ -6,27 +6,51 @@ export default function CityBlock({ position = [0, 0, 0] } = {}) {
 
   const [x, y, z] = position;
 
-  Road({
+  const entities = [];
+
+  const road = Road({
     position: [x, y, z],
   });
 
-  Building({
+  if (road) {
+    entities.push(road);
+  }
+
+  const southwest = Building({
     position: [x - 6, y, z - 6],
     height: 8,
   });
 
-  Building({
+  if (southwest) {
+    entities.push(southwest);
+  }
+
+  const southeast = Building({
     position: [x + 6, y, z - 6],
     height: 12,
   });
 
-  Building({
+  if (southeast) {
+    entities.push(southeast);
+  }
+
+  const northwest = Building({
     position: [x - 6, y, z + 6],
     height: 10,
   });
 
-  Building({
+  if (northwest) {
+    entities.push(northwest);
+  }
+
+  const northeast = Building({
     position: [x + 6, y, z + 6],
     height: 7,
   });
+
+  if (northeast) {
+    entities.push(northeast);
+  }
+
+  return entities;
 }
