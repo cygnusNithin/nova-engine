@@ -25,7 +25,7 @@ function isGizmoObject(object) {
 }
 
 export default function EditorRaycaster() {
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
 
   const raycaster = useRef(new THREE.Raycaster());
 
@@ -50,21 +50,15 @@ export default function EditorRaycaster() {
         return;
       }
 
-      const rect = event.target?.getBoundingClientRect?.();
+      const rect = gl.domElement.getBoundingClientRect();
 
-      if (rect) {
-        pointer.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
 
-        pointer.current.y = -(
-          ((event.clientY - rect.top) / rect.height) * 2 -
-          1
-        );
-      } else {
-        pointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
+      pointer.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-        pointer.current.y = -((event.clientY / window.innerHeight) * 2 - 1);
-      }
-
+      camera.updateMatrixWorld();
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
       raycaster.current.setFromCamera(pointer.current, camera);
 
       const meshes = [];

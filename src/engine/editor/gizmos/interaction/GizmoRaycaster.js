@@ -20,6 +20,13 @@ class GizmoRaycaster {
 
     this.ndc.set(pointer.x, pointer.y);
 
+    /*
+     * Camera position/orientation may have changed since the
+     * previous render. Force the world matrix to be current
+     * before generating the ray.
+     */
+    camera.updateMatrixWorld(true);
+
     this.raycaster.setFromCamera(this.ndc, camera);
 
     this.lastRay.copy(this.raycaster.ray);

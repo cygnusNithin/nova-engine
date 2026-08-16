@@ -16,20 +16,28 @@ export default function CameraController() {
   );
 
   useFrame((_, delta) => {
+    /*
+     * Update the actual camera transform first.
+     */
     CameraManager(camera, keyboard, mouse, editor, delta);
 
     /*
-     * IMPORTANT
+     * IMPORTANT:
      *
-     * Camera movement changes the projection of the pointer ray even
-     * when the physical mouse has not moved.
+     * CameraManager can change position/orientation.
      *
-     * R3F normally refreshes pointer intersections from pointer events.
-     * Camera movement itself does not necessarily generate another
-     * pointer event.
+     * Three.js normally updates matrixWorld during the render
+     * phase, but R3F pointer events may be refreshed before that.
      *
-     * Refresh R3F's event ray after the camera has moved so gizmo
-     * hover/selection remains correct from every camera angle.
+     * The pointer ray must therefore use the NEW camera matrix.
+     */
+    camera.updateMatrixWorld(true);
+
+    /*
+     * Recalculate R3F's pointer ray using the current camera.
+     *
+     * This is what keeps gizmo hover synchronized even when the
+     * mouse itself has not moved.
      */
     if (events?.update) {
       events.update();
