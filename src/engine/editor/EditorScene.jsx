@@ -1,3 +1,4 @@
+import EditorCursorProbe from "./debug/EditorCursorProbe";
 import EditorRaycaster from "./selection/EditorRaycaster";
 import EditorShortcuts from "./shortcuts/EditorShortcuts";
 
@@ -7,6 +8,8 @@ export default function EditorScene() {
   return (
     <>
       <EditorRaycaster />
+
+      <EditorCursorProbe />
 
       <EditorVisualManager />
 

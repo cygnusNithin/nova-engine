@@ -134,40 +134,50 @@ import useEngineStore from "../../store/engineStore";
 import CameraManager from "./CameraManager";
 
 export default function CameraController() {
+  const { camera, events } = useThree();
 
-    const { camera } = useThree();
+  const keyboard = useEngineStore((state) => state.keyboard);
+  const mouse = useEngineStore((state) => state.mouse);
+  const editor = useEngineStore((state) => state.editor);
 
-    const keyboard = useEngineStore(state => state.keyboard);
-    const mouse = useEngineStore(state => state.mouse);
-    const editor = useEngineStore(state => state.editor);
-    const consumeMouseMotion = useEngineStore(
-        state => state.consumeMouseMotion
-    );
+  const consumeMouseMotion = useEngineStore(
+    (state) => state.consumeMouseMotion,
+  );
 
-    useFrame((_, delta) => {
+  useFrame((_, delta) => {
+    /*
+     * Update the actual camera transform first.
+     */
+    CameraManager(camera, keyboard, mouse, editor, delta);
 
-        CameraManager(
+    /*
+     * IMPORTANT:
+     *
+     * CameraManager can change position/orientation.
+     *
+     * Three.js normally updates matrixWorld during the render
+     * phase, but R3F pointer events may be refreshed before that.
+     *
+     * The pointer ray must therefore use the NEW camera matrix.
+     */
+    camera.updateMatrixWorld(true);
 
-            camera,
+    /*
+     * Recalculate R3F's pointer ray using the current camera.
+     *
+     * This is what keeps gizmo hover synchronized even when the
+     * mouse itself has not moved.
+     */
+    if (events?.update) {
+      events.update();
+    }
 
-            keyboard,
+    if (mouse.deltaX || mouse.deltaY || mouse.wheel) {
+      consumeMouseMotion();
+    }
+  }, -1);
 
-            mouse,
-
-            editor,
-
-            delta
-
-        );
-
-        if (mouse.deltaX || mouse.deltaY || mouse.wheel) {
-            consumeMouseMotion();
-        }
-
-    });
-
-    return null;
-
+  return null;
 }
 
 
@@ -179,32 +189,16 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraEditor
 import { updateCameraRotation } from "./CameraRotation";
 import { updateCameraMovement } from "./CameraMovement";
 
-export function updateEditorCamera(
-    camera,
-    keyboard,
-    mouse,
-    editor,
-    delta
-) {
+export function updateEditorCamera(camera, keyboard, mouse, editor, delta) {
+  const speed = keyboard.ShiftLeft
+    ? editor.cameraSpeed * 2
+    : editor.cameraSpeed;
 
-    const speed = keyboard.ShiftLeft
-        ? editor.cameraSpeed * 2
-        : editor.cameraSpeed;
+  updateCameraRotation(camera, mouse, editor.mouseSensitivity);
 
-    updateCameraRotation(
-        camera,
-        mouse,
-        editor.mouseSensitivity
-    );
-
-    updateCameraMovement(
-        camera,
-        keyboard,
-        speed,
-        delta
-    );
-
+  updateCameraMovement(camera, keyboard, mouse, speed, delta);
 }
+
 
 
 ==============================
@@ -385,56 +379,47 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraMoveme
 import * as THREE from "three";
 
 const direction = new THREE.Vector3();
+
 const forward = new THREE.Vector3();
+
 const right = new THREE.Vector3();
 
-export function updateCameraMovement(
-    camera,
-    keyboard,
-    speed,
-    delta
-) {
+export function updateCameraMovement(camera, keyboard, mouse, speed, delta) {
+  direction.set(0, 0, 0);
 
-    direction.set(0,0,0);
+  camera.getWorldDirection(forward);
 
-    camera.getWorldDirection(forward);
+  forward.y = 0;
 
-    forward.y = 0;
-
+  if (forward.lengthSq() > 0) {
     forward.normalize();
+  }
 
-    right.crossVectors(
-        forward,
-        camera.up
-    ).normalize();
+  right.crossVectors(forward, camera.up).normalize();
 
-    if (keyboard.KeyW)
-        direction.add(forward);
+  if (keyboard.KeyW) {
+    direction.add(forward);
+  }
 
-    if (keyboard.KeyS)
-        direction.sub(forward);
+  if (keyboard.KeyS) {
+    direction.sub(forward);
+  }
 
-    if (keyboard.KeyA)
-        direction.sub(right);
+  if (keyboard.KeyA) {
+    direction.sub(right);
+  }
 
-    if (keyboard.KeyD)
-        direction.add(right);
+  if (keyboard.KeyD) {
+    direction.add(right);
+  }
 
-    if (keyboard.Space)
-        direction.y += 1;
+  if (direction.lengthSq() > 0) {
+    direction.normalize();
 
-    if (keyboard.ControlLeft)
-        direction.y -= 1;
-
-    if (direction.lengthSq() > 0)
-        direction.normalize();
-
-    camera.position.addScaledVector(
-        direction,
-        speed * delta * 60
-    );
-
+    camera.position.addScaledVector(direction, speed * delta * 60);
+  }
 }
+
 
 
 ==============================
@@ -443,12 +428,29 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\camera\CameraRotati
 
 import * as THREE from "three";
 
-const target = new THREE.Vector3();
+const states = new WeakMap();
 
-let yaw = 0;
-let pitch = 0;
+function getState(camera) {
+    let state = states.get(camera);
 
-let initialized = false;
+    if (state) {
+        return state;
+    }
+
+    const direction = new THREE.Vector3();
+
+    camera.getWorldDirection(direction);
+
+    state = {
+        yaw: Math.atan2(direction.x, direction.z),
+        pitch: Math.asin(direction.y),
+        target: new THREE.Vector3(),
+    };
+
+    states.set(camera, state);
+
+    return state;
+}
 
 export function updateCameraRotation(
     camera,
@@ -456,48 +458,36 @@ export function updateCameraRotation(
     sensitivity
 ) {
 
-    if (!initialized) {
-
-    const direction = new THREE.Vector3();
-
-    camera.getWorldDirection(direction);
-
-    pitch = Math.asin(direction.y);
-
-    yaw = Math.atan2(direction.x, direction.z);
-
-    initialized = true;
-
-}
+    const state = getState(camera);
 
     // Left drag is reserved for selection and gizmo manipulation.
     if (!mouse.right)
         return;
 
-    yaw -= mouse.deltaX * sensitivity;
+    state.yaw -= mouse.deltaX * sensitivity;
 
-    pitch -= mouse.deltaY * sensitivity;
+    state.pitch -= mouse.deltaY * sensitivity;
 
     const limit = Math.PI / 2 - 0.01;
 
-    pitch = Math.max(
+    state.pitch = Math.max(
         -limit,
-        Math.min(limit, pitch)
+        Math.min(limit, state.pitch)
     );
 
-    target.set(
+    state.target.set(
 
-        Math.cos(pitch) * Math.sin(yaw),
+        Math.cos(state.pitch) * Math.sin(state.yaw),
 
-        Math.sin(pitch),
+        Math.sin(state.pitch),
 
-        Math.cos(pitch) * Math.cos(yaw)
+        Math.cos(state.pitch) * Math.cos(state.yaw)
 
     );
 
-    target.add(camera.position);
+    state.target.add(camera.position);
 
-    camera.lookAt(target);
+    camera.lookAt(state.target);
 
 }
 
@@ -767,29 +757,53 @@ export default function CityBlock({ position = [0, 0, 0] } = {}) {
 
   const [x, y, z] = position;
 
-  Road({
+  const entities = [];
+
+  const road = Road({
     position: [x, y, z],
   });
 
-  Building({
+  if (road) {
+    entities.push(road);
+  }
+
+  const southwest = Building({
     position: [x - 6, y, z - 6],
     height: 8,
   });
 
-  Building({
+  if (southwest) {
+    entities.push(southwest);
+  }
+
+  const southeast = Building({
     position: [x + 6, y, z - 6],
     height: 12,
   });
 
-  Building({
+  if (southeast) {
+    entities.push(southeast);
+  }
+
+  const northwest = Building({
     position: [x - 6, y, z + 6],
     height: 10,
   });
 
-  Building({
+  if (northwest) {
+    entities.push(northwest);
+  }
+
+  const northeast = Building({
     position: [x + 6, y, z + 6],
     height: 7,
   });
+
+  if (northeast) {
+    entities.push(northeast);
+  }
+
+  return entities;
 }
 
 
@@ -872,30 +886,38 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\city\generators\Cit
 import { useEffect } from "react";
 
 import CityBlock from "../blocks/CityBlock";
+import World from "../../world/World";
 
 export default function CityGenerator() {
   useEffect(() => {
     console.log("[CityGenerator] Starting city generation");
 
     const spacing = 35;
+    const entities = [];
 
-    CityBlock({
+    entities.push(...CityBlock({
       position: [-spacing, 0, -spacing],
-    });
+    }));
 
-    CityBlock({
+    entities.push(...CityBlock({
       position: [spacing, 0, -spacing],
-    });
+    }));
 
-    CityBlock({
+    entities.push(...CityBlock({
       position: [-spacing, 0, spacing],
-    });
+    }));
 
-    CityBlock({
+    entities.push(...CityBlock({
       position: [spacing, 0, spacing],
-    });
+    }));
 
     console.log("[CityGenerator] City generation complete");
+
+    return () => {
+      entities.forEach((entity) => {
+        World.despawn(entity);
+      });
+    };
   }, []);
 
   return null;
@@ -1596,6 +1618,7 @@ export default function EditorManager() {
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\EditorScene.jsx
 ==============================
 
+import EditorCursorProbe from "./debug/EditorCursorProbe";
 import EditorRaycaster from "./selection/EditorRaycaster";
 import EditorShortcuts from "./shortcuts/EditorShortcuts";
 
@@ -1605,6 +1628,8 @@ export default function EditorScene() {
   return (
     <>
       <EditorRaycaster />
+
+      <EditorCursorProbe />
 
       <EditorVisualManager />
 
@@ -1677,69 +1702,470 @@ export * from "./inspector";
 
 
 ==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\debug\EditorCursorProbe.jsx
+==============================
+
+import { useEffect, useRef } from "react";
+import { useThree } from "@react-three/fiber";
+import * as THREE from "three";
+
+export default function EditorCursorProbe() {
+  const { camera, gl, scene } = useThree();
+
+  const raycaster = useRef(new THREE.Raycaster());
+  const pointer = useRef(new THREE.Vector2());
+
+  const lastCameraPosition = useRef(new THREE.Vector3());
+  const lastCameraQuaternion = useRef(new THREE.Quaternion());
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    if (!canvas) {
+      return undefined;
+    }
+
+    function getCanvasPointer(event) {
+      const rect = canvas.getBoundingClientRect();
+
+      if (!rect.width || !rect.height) {
+        return null;
+      }
+
+      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+
+      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      return {
+        rect,
+        x,
+        y,
+      };
+    }
+
+    function isInsideCanvas(event, rect) {
+      return (
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+      );
+    }
+
+    function isGizmoObject(object) {
+      let current = object;
+
+      while (current) {
+        if (current.userData?.gizmo) {
+          return true;
+        }
+
+        current = current.parent;
+      }
+
+      return false;
+    }
+
+    function getGizmoWorldData(object) {
+      object.updateWorldMatrix(true, false);
+
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+
+      object.matrixWorld.decompose(position, quaternion, scale);
+
+      return {
+        position,
+        quaternion,
+        scale,
+      };
+    }
+
+    function logCameraChanged() {
+      camera.updateMatrixWorld();
+
+      const positionChanged = !lastCameraPosition.current.equals(
+        camera.position,
+      );
+
+      const quaternionChanged = !lastCameraQuaternion.current.equals(
+        camera.quaternion,
+      );
+
+      if (!positionChanged && !quaternionChanged) {
+        return;
+      }
+
+      console.groupCollapsed("[CAMERA_CHANGED]");
+
+      console.log("position:", camera.position.clone());
+
+      console.log("rotation:", camera.rotation.clone());
+
+      console.log("quaternion:", camera.quaternion.clone());
+
+      console.log("matrixWorldNeedsUpdate:", camera.matrixWorldNeedsUpdate);
+
+      console.log(
+        "projectionMatrixNeedsUpdate:",
+        camera.projectionMatrixNeedsUpdate,
+      );
+
+      console.log("matrixWorld:", camera.matrixWorld.clone());
+
+      console.log("projectionMatrix:", camera.projectionMatrix.clone());
+
+      console.groupEnd();
+
+      lastCameraPosition.current.copy(camera.position);
+      lastCameraQuaternion.current.copy(camera.quaternion);
+    }
+
+    function onPointerMove(event) {
+      const result = getCanvasPointer(event);
+
+      if (!result) {
+        return;
+      }
+
+      const { rect, x, y } = result;
+
+      if (!isInsideCanvas(event, rect)) {
+        return;
+      }
+
+      pointer.current.set(x, y);
+
+      /*
+       * IMPORTANT:
+       *
+       * The camera must be up-to-date BEFORE setFromCamera().
+       */
+      camera.updateMatrixWorld();
+
+      if (camera.isPerspectiveCamera) {
+        camera.updateProjectionMatrix();
+      }
+
+      raycaster.current.setFromCamera(pointer.current, camera);
+
+      console.groupCollapsed("[EDITOR_POINTER]");
+
+      console.log("screen:", {
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      console.log("canvasRect:", {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+
+      console.log("normalizedPointer:", {
+        x,
+        y,
+      });
+
+      console.log("camera.position:", camera.position.clone());
+
+      console.log("camera.rotation:", camera.rotation.clone());
+
+      console.log("camera.quaternion:", camera.quaternion.clone());
+
+      console.log("camera.matrixWorld:", camera.matrixWorld.clone());
+
+      console.log("camera.projectionMatrix:", camera.projectionMatrix.clone());
+
+      console.log("ray.origin:", raycaster.current.ray.origin.clone());
+
+      console.log("ray.direction:", raycaster.current.ray.direction.clone());
+
+      console.groupEnd();
+
+      /*
+       * ---------------------------------------------------------
+       * Gizmo intersection diagnostic
+       * ---------------------------------------------------------
+       *
+       * We intentionally inspect ALL meshes here.
+       * This does not modify selection.
+       */
+
+      const meshes = [];
+
+      scene.traverse((object) => {
+        if (!object.isMesh) {
+          return;
+        }
+
+        if (object.userData?.ignoreRaycast) {
+          return;
+        }
+
+        meshes.push(object);
+      });
+
+      const intersections = raycaster.current.intersectObjects(meshes, true);
+
+      const gizmoHit = intersections.find((hit) => isGizmoObject(hit.object));
+
+      console.groupCollapsed("[EDITOR_RAYCAST_HITS]");
+
+      console.log("hit count:", intersections.length);
+
+      intersections.forEach((hit, index) => {
+        console.log(`hit[${index}]`, {
+          object: hit.object,
+          name: hit.object?.name,
+          type: hit.object?.type,
+          userData: hit.object?.userData,
+          distance: hit.distance,
+          point: hit.point?.clone(),
+        });
+      });
+
+      console.groupEnd();
+
+      if (!gizmoHit) {
+        console.log("[GIZMO_POINTER] NO GIZMO HIT");
+        return;
+      }
+
+      const gizmoObject = gizmoHit.object;
+
+      const gizmoWorld = getGizmoWorldData(gizmoObject);
+
+      console.groupCollapsed("[GIZMO_POINTER]");
+
+      console.log("pointer:", pointer.current.clone());
+
+      console.log("ray.origin:", raycaster.current.ray.origin.clone());
+
+      console.log("ray.direction:", raycaster.current.ray.direction.clone());
+
+      console.log("gizmo object:", gizmoObject);
+
+      console.log("gizmo world position:", gizmoWorld.position.clone());
+
+      console.log("gizmo world quaternion:", gizmoWorld.quaternion.clone());
+
+      console.log("gizmo world scale:", gizmoWorld.scale.clone());
+
+      console.log("intersection distance:", gizmoHit.distance);
+
+      console.log("intersection point:", gizmoHit.point.clone());
+
+      console.log("intersection face:", gizmoHit.face);
+
+      console.groupEnd();
+    }
+
+    function onPointerEnter(event) {
+      const result = getCanvasPointer(event);
+
+      if (!result) {
+        return;
+      }
+
+      console.log("[EDITOR_POINTER_ENTER]", {
+        screen: {
+          x: event.clientX,
+          y: event.clientY,
+        },
+        normalizedPointer: {
+          x: result.x,
+          y: result.y,
+        },
+      });
+
+      /*
+       * Run immediately when cursor enters the canvas.
+       * This establishes the first valid pointer/ray state.
+       */
+      onPointerMove(event);
+    }
+
+    function onPointerLeave() {
+      console.log("[EDITOR_POINTER_LEAVE]");
+    }
+
+    /*
+     * Camera diagnostic polling.
+     *
+     * This is deliberately lightweight.
+     * It lets us detect camera changes even when the
+     * camera controller does not dispatch an event.
+     */
+    let animationFrame;
+
+    function monitorCamera() {
+      logCameraChanged();
+
+      animationFrame = requestAnimationFrame(monitorCamera);
+    }
+
+    canvas.addEventListener("pointermove", onPointerMove);
+
+    canvas.addEventListener("pointerenter", onPointerEnter);
+
+    canvas.addEventListener("pointerleave", onPointerLeave);
+
+    animationFrame = requestAnimationFrame(monitorCamera);
+
+    return () => {
+      canvas.removeEventListener("pointermove", onPointerMove);
+
+      canvas.removeEventListener("pointerenter", onPointerEnter);
+
+      canvas.removeEventListener("pointerleave", onPointerLeave);
+
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [camera, gl, scene]);
+
+  return null;
+}
+
+
+
+==============================
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoController.js
 ==============================
+
+import useEngineStore from "../../../store/engineStore";
 
 import GizmoState from "./GizmoState";
 
 class GizmoController {
+  // ============================================================
+  // SELECTION
+  // ============================================================
+
   select(entity) {
-    console.log("========== GIZMO CONTROLLER SELECT ==========");
-    console.log("Entity:", entity);
+    /*
+     * Never allow the active transform to switch entities.
+     */
+    if (
+      GizmoState.transforming &&
+      GizmoState.entity &&
+      entity !== GizmoState.entity
+    ) {
+      return false;
+    }
 
     GizmoState.entity = entity;
 
-    console.log("GizmoState.entity:", GizmoState.entity);
+    return true;
   }
 
   clear() {
-    console.log("========== GIZMO CONTROLLER CLEAR ==========");
+    /*
+     * Never clear the selected entity in the middle of
+     * a transform operation.
+     */
+    if (GizmoState.transforming) {
+      return false;
+    }
 
     GizmoState.entity = null;
     GizmoState.axis = null;
     GizmoState.hoveredAxis = null;
     GizmoState.dragging = false;
+
+    return true;
   }
 
   getSelectedEntity() {
     return GizmoState.entity;
   }
 
-  beginDrag(axis) {
-    console.log("========== GIZMO CONTROLLER BEGIN DRAG ==========");
-    console.log("Axis:", axis);
+  // ============================================================
+  // MODE
+  // ============================================================
 
-    GizmoState.axis = axis;
-    GizmoState.dragging = true;
+  setMode(mode) {
+    /*
+     * W / E / R are tool selectors.
+     *
+     * They cannot switch tools while an actual transform
+     * is being performed.
+     */
+    if (GizmoState.transforming) {
+      return false;
+    }
+
+    GizmoState.mode = mode;
+    GizmoState.hoveredAxis = null;
+
+    useEngineStore.getState().setEditor({
+      gizmoMode: mode,
+    });
+
+    return true;
   }
 
-  updateDrag(pointer) {
-    if (!GizmoState.dragging) {
+  getMode() {
+    return GizmoState.mode;
+  }
+
+  // ============================================================
+  // HOVER
+  // ============================================================
+
+  setHovered(axis) {
+    if (GizmoState.transforming) {
       return;
     }
 
-    GizmoState.pointer = pointer;
-  }
-
-  endDrag() {
-    console.log("========== GIZMO CONTROLLER END DRAG ==========");
-
-    GizmoState.dragging = false;
-    GizmoState.axis = null;
-  }
-
-  setMode(mode) {
-    console.log("========== GIZMO MODE ==========");
-    console.log("Mode:", mode);
-
-    GizmoState.mode = mode;
-  }
-
-  setHovered(axis) {
-    console.log("========== GIZMO HOVER STATE ==========");
-    console.log("Axis:", axis);
-
     GizmoState.hoveredAxis = axis;
+  }
+
+  clearHover() {
+    if (GizmoState.transforming) {
+      return;
+    }
+
+    GizmoState.hoveredAxis = null;
+  }
+
+  getHoveredAxis() {
+    return GizmoState.hoveredAxis;
+  }
+
+  // ============================================================
+  // TRANSFORM
+  // ============================================================
+
+  beginTransform() {
+    GizmoState.transforming = true;
+
+    return true;
+  }
+
+  endTransform() {
+    GizmoState.transforming = false;
+    GizmoState.axis = null;
+    GizmoState.dragging = false;
+    GizmoState.hoveredAxis = null;
+  }
+
+  isTransforming() {
+    return GizmoState.transforming;
+  }
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  isDragging() {
+    return GizmoState.dragging;
+  }
+
+  getAxis() {
+    return GizmoState.axis;
   }
 }
 
@@ -1775,207 +2201,750 @@ export default {
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoManager.jsx
 ==============================
 
-import { useEffect } from "react";
-import { useThree } from "@react-three/fiber";
+import { useCallback, useEffect, useState } from "react";
+
+import { useFrame, useThree } from "@react-three/fiber";
+
+import * as THREE from "three";
 
 import useEngineStore from "../../../store/engineStore";
 
 import GizmoController from "./GizmoController";
+
 import GizmoHoverController from "./interaction/GizmoHoverController";
+import GizmoDragController from "./interaction/GizmoDragController";
+import GizmoDragPlane from "./interaction/GizmoDragPlane";
+import GizmoRaycaster from "./interaction/GizmoRaycaster";
+import GizmoRotateController from "./interaction/GizmoRotateController";
+import GizmoScaleController from "./interaction/GizmoScaleController";
+
+import GizmoInteraction from "./interaction/GizmoInteraction";
 
 import MoveGizmo from "./Move/MoveGizmo";
 import RotateGizmo from "./Rotate/RotateGizmo";
 import ScaleGizmo from "./Scale/ScaleGizmo";
 
-import GizmoInteraction from "./interaction/GizmoInteraction";
-import GizmoDragController from "./interaction/GizmoDragController";
-import GizmoDragPlane from "./interaction/GizmoDragPlane";
-import GizmoRaycaster from "./interaction/GizmoRaycaster";
+import { GIZMO_MODES } from "./shared/GizmoConstants";
+
+import GizmoState from "./GizmoState";
+import GizmoDebug from "./interaction/GizmoDebug";
 
 export default function GizmoManager() {
   const selectedEntity = useEngineStore((state) => state.editor.selectedEntity);
 
-  const { camera } = useThree();
+  const gizmoMode = useEngineStore((state) => state.editor.gizmoMode);
 
-  // ============================================================
-  // SELECTION CHANGE
-  // ============================================================
+  const { camera, pointer } = useThree();
+
+  const [hoveredAxis, setHoveredAxis] = useState(null);
+
+  const [activeAxis, setActiveAxis] = useState(null);
+
+  /*
+   * ============================================================
+   * CAMERA DIAGNOSTICS
+   * ============================================================
+   */
+
+  useFrame(() => {
+    GizmoDebug.observeCamera(
+      camera,
+      gizmoMode,
+      GizmoController.isTransforming(),
+      pointer,
+      selectedEntity,
+    );
+  });
+
+  /*
+   * ============================================================
+   * MODE DIAGNOSTICS
+   * ============================================================
+   */
 
   useEffect(() => {
-    console.log("========== GIZMO SELECTION ==========");
-    console.log("Selected Entity:", selectedEntity);
+    GizmoDebug.modeChanged(gizmoMode);
+  }, [gizmoMode]);
+
+  /*
+   * ============================================================
+   * SELECTION
+   * ============================================================
+   */
+
+  useEffect(() => {
+    /*
+     * Do not allow selection changes while a gizmo operation
+     * is active.
+     */
+
+    if (GizmoController.isTransforming()) {
+      return;
+    }
 
     if (!selectedEntity) {
-      console.log("No selected entity -> clearing gizmo");
-
       GizmoController.clear();
       GizmoHoverController.clear();
+
       return;
     }
 
     GizmoController.select(selectedEntity);
   }, [selectedEntity]);
 
+  /*
+   * ============================================================
+   * MODE
+   * ============================================================
+   */
+
   useEffect(() => {
-    const handlePointerUp = () => {
+    if (GizmoController.isTransforming()) {
+      return;
+    }
+
+    GizmoController.setMode(gizmoMode);
+  }, [gizmoMode]);
+
+  /*
+   * ============================================================
+   * POINTER CAPTURE
+   * ============================================================
+   */
+
+  const capturePointer = (pointerTarget, pointerId) => {
+    if (!pointerTarget || pointerId === null || pointerId === undefined) {
+      return;
+    }
+
+    if (typeof pointerTarget.setPointerCapture !== "function") {
+      return;
+    }
+
+    try {
+      pointerTarget.setPointerCapture(pointerId);
+    } catch {
+      /*
+       * Pointer capture may already belong to another target.
+       */
+    }
+  };
+
+  /*
+   * ============================================================
+   * END TRANSFORM
+   * ============================================================
+   */
+
+  const endActiveTransform = useCallback(
+    (pointerId = null) => {
+      const mode = gizmoMode;
+      const axis = GizmoState.axis;
+
+      /*
+       * MOVE
+       */
+
       if (GizmoDragController.isDragging()) {
-        GizmoDragController.end();
+        GizmoDragController.end(pointerId);
+
+        GizmoDebug.transformEnd(mode, axis);
       }
+
+      /*
+       * ROTATE
+       */
+
+      if (GizmoRotateController.isRotating()) {
+        GizmoRotateController.end(pointerId);
+
+        GizmoDebug.transformEnd(mode, axis);
+      }
+
+      /*
+       * SCALE
+       */
+
+      if (GizmoScaleController.isScaling()) {
+        GizmoScaleController.end(pointerId);
+
+        GizmoDebug.transformEnd(mode, axis);
+      }
+
+      /*
+       * Clear React state.
+       */
+
+      setActiveAxis(null);
+      setHoveredAxis(null);
+
+      /*
+       * Clear shared gizmo state.
+       */
+
+      GizmoState.transforming = false;
+      GizmoState.axis = null;
+      GizmoState.hoveredAxis = null;
+
+      GizmoHoverController.clear();
+    },
+    [gizmoMode],
+  );
+
+  /*
+   * ============================================================
+   * CANCEL TRANSFORM
+   * ============================================================
+   */
+
+  const cancelActiveTransform = useCallback(
+    (pointerId = null) => {
+      const mode = gizmoMode;
+      const axis = GizmoState.axis;
+
+      /*
+       * MOVE
+       */
+
+      if (GizmoDragController.isDragging()) {
+        GizmoDragController.cancel(pointerId);
+
+        GizmoDebug.transformCancel(mode, axis);
+      }
+
+      /*
+       * ROTATE
+       */
+
+      if (GizmoRotateController.isRotating()) {
+        GizmoRotateController.cancel(pointerId);
+
+        GizmoDebug.transformCancel(mode, axis);
+      }
+
+      /*
+       * SCALE
+       */
+
+      if (GizmoScaleController.isScaling()) {
+        GizmoScaleController.cancel(pointerId);
+
+        GizmoDebug.transformCancel(mode, axis);
+      }
+
+      /*
+       * Clear React state.
+       */
+
+      setActiveAxis(null);
+      setHoveredAxis(null);
+
+      /*
+       * Clear shared gizmo state.
+       */
+
+      GizmoState.transforming = false;
+      GizmoState.axis = null;
+      GizmoState.hoveredAxis = null;
+
+      GizmoHoverController.clear();
+    },
+    [gizmoMode],
+  );
+
+  /*
+   * ============================================================
+   * GLOBAL POINTER EVENTS
+   * ============================================================
+   *
+   * IMPORTANT:
+   * These functions are now useCallback functions, so the effect
+   * can safely depend on them.
+   */
+
+  useEffect(() => {
+    const handlePointerUp = (event) => {
+      if (!GizmoController.isTransforming()) {
+        return;
+      }
+
+      endActiveTransform(event.pointerId);
+    };
+
+    const handlePointerCancel = (event) => {
+      if (!GizmoController.isTransforming()) {
+        return;
+      }
+
+      cancelActiveTransform(event.pointerId);
+    };
+
+    const handleWindowBlur = () => {
+      if (!GizmoController.isTransforming()) {
+        return;
+      }
+
+      cancelActiveTransform();
     };
 
     window.addEventListener("pointerup", handlePointerUp);
 
+    window.addEventListener("pointercancel", handlePointerCancel);
+
+    window.addEventListener("blur", handleWindowBlur);
+
     return () => {
       window.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, []);
 
-  // ============================================================
-  // NO ENTITY
-  // ============================================================
+      window.removeEventListener("pointercancel", handlePointerCancel);
+
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [gizmoMode, endActiveTransform, cancelActiveTransform]);
+
+  /*
+   * ============================================================
+   * POINTER DOWN
+   * ============================================================
+   */
+
+  const handlePointerDown = (event, axis) => {
+    /*
+     * FIRST:
+     * Stop the gizmo pointer event from reaching the scene/entity
+     * selection system.
+     *
+     * This is important for the Ground-selection problem.
+     */
+
+    event.stopPropagation();
+
+    event.nativeEvent?.stopPropagation();
+
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
+
+    /*
+     * Do not allow a second gizmo operation to begin while one
+     * is already active.
+     */
+
+    if (GizmoController.isTransforming()) {
+      GizmoDebug.pointerBlocked?.({
+        mode: gizmoMode,
+        axis,
+        reason: "already-transforming",
+      });
+
+      return;
+    }
+
+    const object = selectedEntity?.getObject?.();
+
+    if (!object) {
+      GizmoDebug.pointerBlocked?.({
+        mode: gizmoMode,
+        axis,
+        reason: "selected-object-missing",
+      });
+
+      return;
+    }
+
+    const nativeEvent = event.nativeEvent;
+
+    const pointerId = nativeEvent?.pointerId ?? event.pointerId ?? null;
+
+    const pointerTarget = nativeEvent?.target ?? event.target ?? null;
+
+    /*
+     * The DOM event may have arrived while the editor camera was moving.
+     * Rebuild the ray from the camera's current world matrix before choosing
+     * a drag plane. This keeps move and scale plane selection aligned with
+     * the same camera pose that R3F uses for the handle hit test.
+     */
+    camera.updateMatrixWorld(true);
+
+    const currentRay = GizmoRaycaster.update(camera, event.pointer);
+
+    const pointerRayDirection = currentRay?.direction ?? event.ray?.direction;
+
+    GizmoDebug.pointerDown?.({
+      mode: gizmoMode,
+      axis,
+      event,
+      selectedEntity,
+      object,
+      pointerId,
+      pointerTarget,
+      camera,
+      ray: currentRay,
+    });
+
+    /*
+     * ==========================================================
+     * MOVE
+     * ==========================================================
+     */
+
+    if (gizmoMode === GIZMO_MODES.MOVE) {
+      const plane = GizmoDragPlane.build(
+        axis,
+        object.position,
+        camera,
+        pointerRayDirection,
+      );
+
+      if (!plane) {
+        GizmoDebug.transformRejected?.({
+          mode: "move",
+          axis,
+          reason: "drag-plane-build-failed",
+        });
+
+        return;
+      }
+
+      const startPoint = GizmoRaycaster.intersectPlane(
+        camera,
+        event.pointer,
+        plane,
+      );
+
+      if (!startPoint) {
+        GizmoDebug.transformRejected?.({
+          mode: "move",
+          axis,
+          reason: "start-plane-intersection-failed",
+        });
+
+        return;
+      }
+
+      const started = GizmoDragController.begin(
+        axis,
+        object.position.clone(),
+        plane,
+        startPoint,
+        pointerId,
+        pointerTarget,
+      );
+
+      if (!started) {
+        GizmoDebug.transformRejected?.({
+          mode: "move",
+          axis,
+          reason: "move-controller-rejected",
+        });
+
+        return;
+      }
+
+      capturePointer(pointerTarget, pointerId);
+
+      setActiveAxis(axis);
+      setHoveredAxis(axis);
+
+      GizmoState.transforming = true;
+      GizmoState.axis = axis;
+
+      GizmoDebug.transformStart({
+        mode: "move",
+        axis,
+        entity: selectedEntity,
+        pointerId,
+      });
+
+      return;
+    }
+
+    /*
+     * ==========================================================
+     * ROTATE
+     * ==========================================================
+     */
+
+    if (gizmoMode === GIZMO_MODES.ROTATE) {
+      if (axis !== "x" && axis !== "y" && axis !== "z") {
+        GizmoDebug.transformRejected?.({
+          mode: "rotate",
+          axis,
+          reason: "invalid-rotation-axis",
+        });
+
+        return;
+      }
+
+      const axisVector = new THREE.Vector3();
+
+      if (axis === "x") {
+        axisVector.set(1, 0, 0);
+      }
+
+      if (axis === "y") {
+        axisVector.set(0, 1, 0);
+      }
+
+      if (axis === "z") {
+        axisVector.set(0, 0, 1);
+      }
+
+      const rotationPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+        axisVector,
+        object.position,
+      );
+
+      const startPoint = GizmoRaycaster.intersectPlane(
+        camera,
+        event.pointer,
+        rotationPlane,
+      );
+
+      if (!startPoint) {
+        GizmoDebug.transformRejected?.({
+          mode: "rotate",
+          axis,
+          reason: "rotation-plane-intersection-failed",
+        });
+
+        return;
+      }
+
+      const started = GizmoRotateController.begin(
+        selectedEntity,
+        axis,
+        startPoint,
+        object.position.clone(),
+        rotationPlane,
+        pointerId,
+        pointerTarget,
+      );
+
+      if (!started) {
+        GizmoDebug.transformRejected?.({
+          mode: "rotate",
+          axis,
+          reason: "rotate-controller-rejected",
+        });
+
+        return;
+      }
+
+      capturePointer(pointerTarget, pointerId);
+
+      setActiveAxis(axis);
+      setHoveredAxis(axis);
+
+      GizmoState.transforming = true;
+      GizmoState.axis = axis;
+
+      GizmoDebug.transformStart({
+        mode: "rotate",
+        axis,
+        entity: selectedEntity,
+        pointerId,
+      });
+
+      return;
+    }
+
+    /*
+     * ==========================================================
+     * SCALE
+     * ==========================================================
+     */
+
+    if (gizmoMode === GIZMO_MODES.SCALE) {
+      const plane = GizmoDragPlane.build(
+        axis,
+        object.position,
+        camera,
+        pointerRayDirection,
+      );
+
+      if (!plane) {
+        GizmoDebug.transformRejected?.({
+          mode: "scale",
+          axis,
+          reason: "scale-drag-plane-build-failed",
+        });
+
+        return;
+      }
+
+      const startPoint = GizmoRaycaster.intersectPlane(
+        camera,
+        event.pointer,
+        plane,
+      );
+
+      if (!startPoint) {
+        GizmoDebug.transformRejected?.({
+          mode: "scale",
+          axis,
+          reason: "scale-start-plane-intersection-failed",
+        });
+
+        return;
+      }
+
+      const started = GizmoScaleController.begin(
+        selectedEntity,
+        axis,
+        startPoint,
+        camera,
+        plane,
+        pointerId,
+        pointerTarget,
+      );
+
+      if (!started) {
+        GizmoDebug.transformRejected?.({
+          mode: "scale",
+          axis,
+          reason: "scale-controller-rejected",
+        });
+
+        return;
+      }
+
+      capturePointer(pointerTarget, pointerId);
+
+      setActiveAxis(axis);
+      setHoveredAxis(axis);
+
+      GizmoState.transforming = true;
+      GizmoState.axis = axis;
+
+      GizmoDebug.transformStart({
+        mode: "scale",
+        axis,
+        entity: selectedEntity,
+        pointerId,
+      });
+    }
+  };
+
+  /*
+   * ============================================================
+   * HOVER
+   * ============================================================
+   */
+
+  const handlePointerOver = (event, axis) => {
+    event.stopPropagation();
+
+    event.nativeEvent?.stopPropagation();
+
+    if (GizmoController.isTransforming()) {
+      return;
+    }
+
+    setHoveredAxis(axis);
+
+    GizmoState.hoveredAxis = axis;
+
+    GizmoController.setHovered(axis);
+
+    GizmoHoverController.enter(axis);
+
+    GizmoDebug.hover({
+      mode: gizmoMode,
+      axis,
+
+      source:
+        event.object?.userData?.gizmoType ?? event.object?.name ?? "unknown",
+
+      event,
+      selectedEntity,
+      camera,
+    });
+  };
+
+  /*
+   * ============================================================
+   * HOVER OUT
+   * ============================================================
+   */
+
+  const handlePointerOut = (event) => {
+    event.stopPropagation();
+
+    event.nativeEvent?.stopPropagation();
+
+    if (GizmoController.isTransforming()) {
+      return;
+    }
+
+    setHoveredAxis(null);
+
+    GizmoState.hoveredAxis = null;
+
+    GizmoController.clearHover();
+
+    GizmoHoverController.leave();
+
+    GizmoDebug.hoverClear();
+  };
+
+  /*
+   * ============================================================
+   * HIGHLIGHT
+   * ============================================================
+   */
+
+  const isHighlighted = (axis) => {
+    return hoveredAxis === axis || activeAxis === axis;
+  };
 
   if (!selectedEntity) {
     return null;
   }
 
-  // ============================================================
-  // POINTER DOWN
-  // ============================================================
-
-  const handlePointerDown = (event, axis) => {
-    event.stopPropagation();
-    event.nativeEvent?.stopPropagation();
-
-    console.log("");
-    console.log("========================================");
-    console.log("========== GIZMO AXIS CLICK ==========");
-    console.log("========================================");
-
-    console.log("Clicked Axis:", axis);
-    console.log("Selected Entity:", selectedEntity);
-
-    const object = selectedEntity?.getObject?.();
-
-    console.log("Object:", object);
-
-    if (!object) {
-      console.warn("GIZMO ERROR: Selected entity has no object");
-      return;
-    }
-
-    console.log("Object Position:", object.position);
-
-    // ------------------------------------------------------------
-    // Build drag plane
-    // ------------------------------------------------------------
-
-    const plane = GizmoDragPlane.build(
-      axis,
-      object.position,
-      camera,
-      event.ray.direction,
-    );
-
-    console.log("Drag Axis:", axis);
-    console.log("Created Drag Plane:", plane);
-
-    if (!plane) {
-      console.warn("GIZMO ERROR: Drag plane was not created");
-      return;
-    }
-
-    // ------------------------------------------------------------
-    // Start drag
-    // ------------------------------------------------------------
-
-    const startPoint = GizmoRaycaster.intersectPlane(
-      camera,
-      event.pointer,
-      plane,
-    );
-
-    if (!startPoint) {
-      console.warn("GIZMO ERROR: Pointer did not intersect drag plane");
-      return;
-    }
-
-    GizmoDragController.begin(
-      axis,
-      object.position.clone(),
-      plane,
-      startPoint,
-    );
-
-    console.log("========== DRAG STARTED ==========");
-    console.log("Axis:", axis);
-    console.log("Object Position:", object.position);
-    console.log("==================================");
-    console.log("");
-  };
-
-  // ============================================================
-  // POINTER OVER
-  // ============================================================
-
-  const handlePointerOver = (event, axis) => {
-    event.stopPropagation();
-
-    console.log("========== GIZMO HOVER ==========");
-    console.log("Hover Axis:", axis);
-
-    GizmoController.setHovered(axis);
-    GizmoHoverController.enter(axis);
-  };
-
-  // ============================================================
-  // POINTER OUT
-  // ============================================================
-
-  const handlePointerOut = (event) => {
-    event.stopPropagation();
-
-    console.log("========== GIZMO HOVER OUT ==========");
-
-    GizmoController.setHovered(null);
-    GizmoHoverController.leave();
-  };
-
-  // ============================================================
-  // RENDER
-  // ============================================================
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
 
   return (
     <>
-      {/* Handles drag calculation every frame */}
       <GizmoInteraction />
 
-      {/* MOVE GIZMO */}
-      <MoveGizmo
-        entity={selectedEntity}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-      />
+      {gizmoMode === GIZMO_MODES.MOVE && (
+        <MoveGizmo
+          entity={selectedEntity}
+          activeAxis={activeAxis}
+          isHighlighted={isHighlighted}
+          onPointerDown={handlePointerDown}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+        />
+      )}
 
-      {/* ROTATE - DISABLED FOR NOW */}
-      {/*
-      <RotateGizmo
-        entity={selectedEntity}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-      />
-      */}
+      {gizmoMode === GIZMO_MODES.ROTATE && (
+        <RotateGizmo
+          entity={selectedEntity}
+          hoveredAxis={hoveredAxis}
+          activeAxis={activeAxis}
+          onPointerDown={handlePointerDown}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+        />
+      )}
 
-      {/* SCALE - DISABLED FOR NOW */}
-      {/*
-      <ScaleGizmo
-        entity={selectedEntity}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-      />
-      */}
+      {gizmoMode === GIZMO_MODES.SCALE && (
+        <ScaleGizmo
+          entity={selectedEntity}
+          hoveredAxis={hoveredAxis}
+          activeAxis={activeAxis}
+          isHighlighted={isHighlighted}
+          onPointerDown={handlePointerDown}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+        />
+      )}
     </>
   );
 }
@@ -2015,6 +2984,89 @@ export default GizmoMath;
 
 
 ==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoModeController.js
+==============================
+
+import GizmoState from "./GizmoState";
+import { GIZMO_MODES } from "./shared/GizmoConstants";
+
+class GizmoModeController {
+  // ============================================================
+  // GET MODE
+  // ============================================================
+
+  getMode() {
+    return GizmoState.mode;
+  }
+
+  // ============================================================
+  // SET MODE
+  // ============================================================
+
+  setMode(mode) {
+    if (!Object.values(GIZMO_MODES).includes(mode)) {
+      console.warn("[GizmoModeController] Invalid gizmo mode:", mode);
+      return false;
+    }
+
+    if (GizmoState.mode === mode) {
+      return true;
+    }
+
+    // Never allow a transform drag to survive a mode change.
+    GizmoState.dragging = false;
+    GizmoState.axis = null;
+    GizmoState.dragOrigin = null;
+    GizmoState.dragPlane = null;
+    GizmoState.pointer = null;
+    GizmoState.pointerId = null;
+    GizmoState.pointerTarget = null;
+
+    GizmoState.mode = mode;
+
+    console.log("[GizmoModeController] Mode changed:", mode);
+
+    return true;
+  }
+
+  // ============================================================
+  // SHORTCUT HELPERS
+  // ============================================================
+
+  move() {
+    return this.setMode(GIZMO_MODES.MOVE);
+  }
+
+  rotate() {
+    return this.setMode(GIZMO_MODES.ROTATE);
+  }
+
+  scale() {
+    return this.setMode(GIZMO_MODES.SCALE);
+  }
+
+  // ============================================================
+  // MODE CHECKS
+  // ============================================================
+
+  isMove() {
+    return GizmoState.mode === GIZMO_MODES.MOVE;
+  }
+
+  isRotate() {
+    return GizmoState.mode === GIZMO_MODES.ROTATE;
+  }
+
+  isScale() {
+    return GizmoState.mode === GIZMO_MODES.SCALE;
+  }
+}
+
+export default new GizmoModeController();
+
+
+
+==============================
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\GizmoState.js
 ==============================
 
@@ -2026,23 +3078,63 @@ class GizmoState {
   }
 
   reset() {
+    // ============================================================
+    // GIZMO
+    // ============================================================
+
     this.mode = GIZMO_MODES.MOVE;
 
     this.space = GIZMO_SPACE.WORLD;
 
+    // ============================================================
+    // SELECTION
+    // ============================================================
+
     this.entity = null;
 
-    this.axis = null;
+    // ============================================================
+    // HOVER
+    // ============================================================
 
     this.hoveredAxis = null;
 
+    // ============================================================
+    // TRANSFORM OWNERSHIP
+    // ============================================================
+
+    /*
+     * True while Move / Rotate / Scale owns the pointer.
+     *
+     * While transforming:
+     *
+     * - scene selection is blocked
+     * - selection cannot switch entities
+     * - gizmo mode cannot change
+     * - camera transform input can be blocked
+     */
+    this.transforming = false;
+
+    // ============================================================
+    // DRAG
+    // ============================================================
+
     this.dragging = false;
+
+    this.axis = null;
 
     this.dragOrigin = null;
 
     this.dragPlane = null;
 
     this.pointer = null;
+
+    // ============================================================
+    // POINTER OWNERSHIP
+    // ============================================================
+
+    this.pointerId = null;
+
+    this.pointerTarget = null;
   }
 }
 
@@ -2065,51 +3157,460 @@ export { default as ScaleGizmo } from "./Scale/ScaleGizmo";
 
 
 ==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoDebug.js
+==============================
+
+import * as THREE from "three";
+
+
+class GizmoDebug {
+  constructor() {
+    this.enabled = true;
+
+    this.lastHoverKey = null;
+
+    this.lastCameraPosition = new THREE.Vector3();
+
+    this.lastCameraQuaternion = new THREE.Quaternion();
+
+    this.cameraInitialized = false;
+
+    this.lastTransformState = false;
+
+    this.lastMode = null;
+
+    this.lastPointerState = null;
+
+    this.lastHoverTime = 0;
+
+    this.hoverLogInterval = 100;
+
+    this.cameraLogInterval = 150;
+
+    this.lastCameraLogTime = 0;
+  }
+
+  setEnabled(enabled) {
+    this.enabled = Boolean(enabled);
+  }
+
+  modeChanged(mode) {
+    if (!this.enabled) {
+      return;
+    }
+
+    if (this.lastMode === mode) {
+      return;
+    }
+
+    this.lastMode = mode;
+
+    console.log("[GizmoDebug] MODE", {
+      mode,
+    });
+  }
+
+  hover({ mode, axis, source, event, selectedEntity, camera = null }) {
+    if (!this.enabled) {
+      return;
+    }
+
+    const now = performance.now();
+
+    const hoverKey = `${mode}:${axis}:${source}`;
+
+    /*
+     * Don't spam DevTools if the pointer remains
+     * over the same gizmo object.
+     */
+    if (
+      this.lastHoverKey === hoverKey &&
+      now - this.lastHoverTime < this.hoverLogInterval
+    ) {
+      return;
+    }
+
+    this.lastHoverKey = hoverKey;
+    this.lastHoverTime = now;
+
+    const pointer = event?.pointer;
+    const ray = event?.ray;
+    const point = event?.point;
+    const object = event?.object;
+
+    console.groupCollapsed(`[GizmoDebug] HOVER ${mode} ${axis ?? "none"}`);
+
+    console.log("Target", {
+      mode,
+      axis,
+      source,
+
+      object: object?.name ?? null,
+
+      objectType: object?.type ?? null,
+
+      gizmo: object?.userData?.gizmo ?? false,
+
+      gizmoHit: object?.userData?.gizmoHit ?? false,
+
+      gizmoVisual: object?.userData?.gizmoVisual ?? false,
+
+      gizmoAxis: object?.userData?.gizmoAxis ?? null,
+
+      gizmoType: object?.userData?.gizmoType ?? null,
+
+      selectedEntity:
+        selectedEntity?.name ??
+        selectedEntity?.id ??
+        selectedEntity?.uuid ??
+        null,
+    });
+
+    console.log("Pointer", {
+      ndcX: pointer?.x ?? null,
+
+      ndcY: pointer?.y ?? null,
+
+      clientX: event?.nativeEvent?.clientX ?? null,
+
+      clientY: event?.nativeEvent?.clientY ?? null,
+    });
+
+    this.logCameraAndEntity(camera ?? event?.camera, selectedEntity);
+
+    console.log("Ray", {
+      origin: ray?.origin
+        ? {
+            x: Number(ray.origin.x.toFixed(4)),
+            y: Number(ray.origin.y.toFixed(4)),
+            z: Number(ray.origin.z.toFixed(4)),
+          }
+        : null,
+
+      direction: ray?.direction
+        ? {
+            x: Number(ray.direction.x.toFixed(4)),
+            y: Number(ray.direction.y.toFixed(4)),
+            z: Number(ray.direction.z.toFixed(4)),
+          }
+        : null,
+    });
+
+    console.log("Intersection", {
+      distance: Number.isFinite(event?.distance)
+        ? Number(event.distance.toFixed(4))
+        : null,
+
+      worldPoint: point
+        ? {
+            x: Number(point.x.toFixed(4)),
+            y: Number(point.y.toFixed(4)),
+            z: Number(point.z.toFixed(4)),
+          }
+        : null,
+    });
+
+    console.groupEnd();
+  }
+
+  hoverClear() {
+    if (!this.enabled) {
+      return;
+    }
+
+    if (this.lastHoverKey === null) {
+      return;
+    }
+
+    this.lastHoverKey = null;
+
+    console.log("[GizmoDebug] HOVER CLEAR");
+  }
+
+  pointerDown({
+    mode,
+    axis,
+    event,
+    selectedEntity,
+    object,
+    pointerId,
+    camera = null,
+    ray = null,
+  }) {
+    if (!this.enabled) {
+      return;
+    }
+
+    console.groupCollapsed(`[GizmoDebug] POINTER DOWN ${mode}:${axis}`);
+
+    console.log("Selection", {
+      selectedEntity:
+        selectedEntity?.name ??
+        selectedEntity?.id ??
+        selectedEntity?.uuid ??
+        null,
+
+      gizmoObject: object?.name ?? null,
+
+      gizmo: object?.userData?.gizmo ?? false,
+
+      gizmoHit: object?.userData?.gizmoHit ?? false,
+
+      gizmoAxis: object?.userData?.gizmoAxis ?? null,
+    });
+
+    console.log("Pointer", {
+      pointerId,
+
+      ndcX: event?.pointer?.x ?? null,
+
+      ndcY: event?.pointer?.y ?? null,
+
+      clientX: event?.nativeEvent?.clientX ?? null,
+
+      clientY: event?.nativeEvent?.clientY ?? null,
+    });
+
+    console.log("Live ray", {
+      origin: this.toVectorRecord(ray?.origin),
+      direction: this.toVectorRecord(ray?.direction),
+    });
+
+    this.logCameraAndEntity(camera ?? event?.camera, selectedEntity);
+
+    console.groupEnd();
+  }
+
+  pointerBlocked(data) {
+    if (!this.enabled) {
+      return;
+    }
+
+    console.warn("[GizmoDebug] POINTER BLOCKED", data);
+  }
+
+  transformRejected(data) {
+    if (!this.enabled) {
+      return;
+    }
+
+    console.warn("[GizmoDebug] TRANSFORM REJECTED", data);
+  }
+
+  transformStart({ mode, axis, entity, pointerId }) {
+    if (!this.enabled) {
+      return;
+    }
+
+    this.lastTransformState = true;
+
+    console.groupCollapsed(`[GizmoDebug] TRANSFORM START ${mode}:${axis}`);
+
+    console.log({
+      mode,
+      axis,
+      pointerId,
+
+      entity: entity?.name ?? entity?.id ?? entity?.uuid ?? null,
+    });
+
+    console.groupEnd();
+  }
+
+  transformEnd(mode, axis = null) {
+    if (!this.enabled) {
+      return;
+    }
+
+    this.lastTransformState = false;
+
+    console.log("[GizmoDebug] TRANSFORM END", {
+      mode,
+      axis,
+    });
+  }
+
+  transformCancel(mode, axis = null) {
+    if (!this.enabled) {
+      return;
+    }
+
+    this.lastTransformState = false;
+
+    console.warn("[GizmoDebug] TRANSFORM CANCEL", {
+      mode,
+      axis,
+    });
+  }
+
+  observeCamera(camera, mode, transforming = false, pointer = null, entity = null) {
+    if (!this.enabled || !camera) {
+      return;
+    }
+
+    const positionChanged = this.cameraInitialized
+      ? camera.position.distanceTo(this.lastCameraPosition) > 0.01
+      : true;
+
+    const quaternionChanged = this.cameraInitialized
+      ? this.lastCameraQuaternion.angleTo(camera.quaternion) > 0.01
+      : true;
+
+    if (!positionChanged && !quaternionChanged) {
+      return;
+    }
+
+    this.lastCameraPosition.copy(camera.position);
+
+    this.lastCameraQuaternion.copy(camera.quaternion);
+
+    this.cameraInitialized = true;
+
+    const now = performance.now();
+
+    if (now - this.lastCameraLogTime < this.cameraLogInterval) {
+      return;
+    }
+
+    this.lastCameraLogTime = now;
+
+    console.log("[GizmoDebug] CAMERA CHANGE", {
+      mode,
+      transforming,
+
+      position: {
+        x: Number(camera.position.x.toFixed(3)),
+        y: Number(camera.position.y.toFixed(3)),
+        z: Number(camera.position.z.toFixed(3)),
+      },
+
+      rotation: {
+        x: Number(camera.rotation.x.toFixed(3)),
+        y: Number(camera.rotation.y.toFixed(3)),
+        z: Number(camera.rotation.z.toFixed(3)),
+      },
+
+      pointer: pointer
+        ? {
+            ndcX: Number(pointer.x.toFixed(4)),
+            ndcY: Number(pointer.y.toFixed(4)),
+          }
+        : null,
+
+      selectedEntity: entity
+        ? {
+            name: entity.name ?? entity.id ?? entity.uuid ?? null,
+            position: this.toVectorRecord(entity.transform?.position),
+          }
+        : null,
+    });
+  }
+
+  toVectorRecord(vector) {
+    if (!vector) {
+      return null;
+    }
+
+    return {
+      x: Number(vector.x.toFixed(4)),
+      y: Number(vector.y.toFixed(4)),
+      z: Number(vector.z.toFixed(4)),
+    };
+  }
+
+  logCameraAndEntity(camera, entity) {
+    if (!camera || !entity?.transform) {
+      return;
+    }
+
+    camera.updateMatrixWorld(true);
+
+    const direction = new THREE.Vector3();
+    const projectedOrigin = entity.transform.position.clone().project(camera);
+
+    camera.getWorldDirection(direction);
+
+    console.log("Camera/entity alignment", {
+      cameraPosition: this.toVectorRecord(camera.position),
+      cameraDirection: this.toVectorRecord(direction),
+      entityPosition: this.toVectorRecord(entity.transform.position),
+      entityOriginNdc: this.toVectorRecord(projectedOrigin),
+    });
+  }
+}
+
+export default new GizmoDebug();
+
+
+
+==============================
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoDragController.js
 ==============================
 
 import * as THREE from "three";
 
 import GizmoState from "../GizmoState";
+
 import GizmoMoveController from "./GizmoMoveController";
 
 class GizmoDragController {
   constructor() {
     this.startPoint = new THREE.Vector3();
+
     this.currentPoint = new THREE.Vector3();
+
     this.delta = new THREE.Vector3();
+
+    this.originalPosition = new THREE.Vector3();
+
+    this.hasTransformSnapshot = false;
   }
 
-  // ============================================================
-  // BEGIN DRAG
-  // ============================================================
-
-  begin(axis, origin, plane, startPoint = origin) {
-    console.log("");
-    console.log("========================================");
-    console.log("========== DRAG BEGIN ==========");
-    console.log("========================================");
-
-    console.log("Axis:", axis);
-    console.log("Entity:", GizmoState.entity);
-    console.log("Origin:", origin);
-    console.log("Plane:", plane);
-
-    if (!GizmoState.entity) {
-      console.warn("DRAG BEGIN FAILED: GizmoState.entity is null");
-
-      return;
+  begin(
+    axis,
+    origin,
+    plane,
+    startPoint = origin,
+    pointerId = null,
+    pointerTarget = null,
+  ) {
+    if (GizmoState.dragging) {
+      return false;
     }
+
+    if (GizmoState.transforming) {
+      return false;
+    }
+
+    const entity = GizmoState.entity;
+
+    if (!entity?.transform) {
+      return false;
+    }
+
+    if (!plane || !startPoint) {
+      return false;
+    }
+
+    this.originalPosition.copy(entity.transform.position);
+
+    this.hasTransformSnapshot = true;
 
     GizmoState.axis = axis;
 
-    GizmoState.dragOrigin = origin ? origin.clone() : new THREE.Vector3();
+    GizmoState.dragOrigin = origin?.clone() ?? new THREE.Vector3();
 
     GizmoState.dragPlane = plane;
 
-    GizmoState.pointer = null;
+    GizmoState.pointer = startPoint.clone();
+
+    GizmoState.pointerId = pointerId;
+
+    GizmoState.pointerTarget = pointerTarget;
 
     GizmoState.dragging = true;
+
+    GizmoState.transforming = true;
 
     this.startPoint.copy(startPoint);
 
@@ -2119,28 +3620,23 @@ class GizmoDragController {
 
     GizmoMoveController.reset();
 
-    console.log("Drag started.");
-    console.log("GizmoState.entity:", GizmoState.entity);
-    console.log("GizmoState.axis:", GizmoState.axis);
-    console.log("GizmoState.dragging:", GizmoState.dragging);
-    console.log("Start Point:", this.startPoint);
-
-    console.log("========================================");
-    console.log("");
+    return true;
   }
 
-  // ============================================================
-  // UPDATE
-  // ============================================================
-
-  update(pointer) {
+  update(pointer, pointerId = null) {
     if (!GizmoState.dragging) {
       return null;
     }
 
-    if (!pointer) {
-      console.warn("DRAG UPDATE: Pointer intersection is null");
+    if (
+      GizmoState.pointerId !== null &&
+      pointerId !== null &&
+      GizmoState.pointerId !== pointerId
+    ) {
+      return null;
+    }
 
+    if (!pointer) {
       return null;
     }
 
@@ -2153,21 +3649,95 @@ class GizmoDragController {
     return this.delta.clone();
   }
 
-  // ============================================================
-  // END
-  // ============================================================
+  end(pointerId = null) {
+    if (!GizmoState.dragging) {
+      return false;
+    }
 
-  end() {
-    console.log("");
-    console.log("========== DRAG END ==========");
+    if (
+      GizmoState.pointerId !== null &&
+      pointerId !== null &&
+      GizmoState.pointerId !== pointerId
+    ) {
+      return false;
+    }
 
-    console.log("Final Axis:", GizmoState.axis);
-    console.log("Final Pointer:", GizmoState.pointer);
-    console.log("Final Delta:", this.delta);
+    this.releasePointerCapture();
 
     GizmoMoveController.reset();
 
+    this.clearTransformSnapshot();
+
+    this.resetState();
+
+    return true;
+  }
+
+  cancel(pointerId = null) {
+    if (!GizmoState.dragging) {
+      return false;
+    }
+
+    if (
+      GizmoState.pointerId !== null &&
+      pointerId !== null &&
+      GizmoState.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    this.releasePointerCapture();
+
+    const entity = GizmoState.entity;
+
+    if (entity?.transform && this.hasTransformSnapshot) {
+      entity.transform.setPosition(
+        this.originalPosition.x,
+        this.originalPosition.y,
+        this.originalPosition.z,
+      );
+    }
+
+    GizmoMoveController.reset();
+
+    this.clearTransformSnapshot();
+
+    this.resetState();
+
+    return true;
+  }
+
+  releasePointerCapture() {
+    const target = GizmoState.pointerTarget;
+
+    const pointerId = GizmoState.pointerId;
+
+    if (!target || pointerId === null) {
+      return;
+    }
+
+    try {
+      if (
+        typeof target.hasPointerCapture === "function" &&
+        target.hasPointerCapture(pointerId)
+      ) {
+        target.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // Pointer may already be released.
+    }
+  }
+
+  clearTransformSnapshot() {
+    this.originalPosition.set(0, 0, 0);
+
+    this.hasTransformSnapshot = false;
+  }
+
+  resetState() {
     GizmoState.dragging = false;
+
+    GizmoState.transforming = false;
 
     GizmoState.axis = null;
 
@@ -2177,29 +3747,29 @@ class GizmoDragController {
 
     GizmoState.pointer = null;
 
-    this.startPoint.set(0, 0, 0);
+    GizmoState.pointerId = null;
 
-    this.currentPoint.set(0, 0, 0);
-
-    this.delta.set(0, 0, 0);
-
-    console.log("Dragging:", GizmoState.dragging);
+    GizmoState.pointerTarget = null;
   }
-
-  // ============================================================
-  // GET DELTA
-  // ============================================================
 
   getDelta() {
     return this.delta.clone();
   }
 
-  // ============================================================
-  // IS DRAGGING
-  // ============================================================
-
   isDragging() {
     return GizmoState.dragging;
+  }
+
+  getPointerId() {
+    return GizmoState.pointerId;
+  }
+
+  getAxis() {
+    return GizmoState.axis;
+  }
+
+  getEntity() {
+    return GizmoState.entity;
   }
 }
 
@@ -2216,25 +3786,37 @@ import * as THREE from "three";
 class GizmoDragPlane {
   constructor() {
     this.plane = new THREE.Plane();
+
+    this.axisDirection = new THREE.Vector3();
+
+    this.cameraRight = new THREE.Vector3();
+    this.cameraUp = new THREE.Vector3();
+    this.cameraDirection = new THREE.Vector3();
+
+    this.axisPlaneA = new THREE.Vector3();
+    this.axisPlaneB = new THREE.Vector3();
+
+    this.cameraQuaternion = new THREE.Quaternion();
+
+    // Reusable fallback vector.
+    // Important: this must be initialized before .set() is called.
+    this.fallback = new THREE.Vector3();
   }
 
   build(axis, origin, camera, pointerRayDirection) {
+    if (!origin || !camera) {
+      return null;
+    }
+
     const normal = new THREE.Vector3();
-    const axisDirection = new THREE.Vector3();
+
+    /*
+     * ============================================================
+     * PLANE GIZMOS
+     * ============================================================
+     */
 
     switch (axis) {
-      case "x":
-        axisDirection.set(1, 0, 0);
-        break;
-
-      case "y":
-        axisDirection.set(0, 1, 0);
-        break;
-
-      case "z":
-        axisDirection.set(0, 0, 1);
-        break;
-
       case "xy":
         normal.set(0, 0, 1);
         break;
@@ -2248,61 +3830,172 @@ class GizmoDragPlane {
         break;
 
       default:
-        normal.copy(camera.getWorldDirection(new THREE.Vector3()));
         break;
     }
 
-    if (axisDirection.lengthSq() > 0) {
-      const cameraWorldQuaternion = camera.getWorldQuaternion(
-        new THREE.Quaternion(),
-      );
-      const cameraRight = new THREE.Vector3(1, 0, 0)
-        .applyQuaternion(cameraWorldQuaternion)
+    /*
+     * ============================================================
+     * AXIS GIZMOS
+     * ============================================================
+     */
+
+    if (normal.lengthSq() === 0) {
+      switch (axis) {
+        case "x":
+          this.axisDirection.set(1, 0, 0);
+          break;
+
+        case "y":
+          this.axisDirection.set(0, 1, 0);
+          break;
+
+        case "z":
+          this.axisDirection.set(0, 0, 1);
+          break;
+
+        default:
+          return null;
+      }
+
+      this.axisDirection.normalize();
+
+      /*
+       * ----------------------------------------------------------
+       * CAMERA BASIS
+       * ----------------------------------------------------------
+       */
+
+      camera.getWorldQuaternion(this.cameraQuaternion);
+
+      this.cameraRight
+        .set(1, 0, 0)
+        .applyQuaternion(this.cameraQuaternion)
         .normalize();
-      const cameraUp = new THREE.Vector3(0, 1, 0)
-        .applyQuaternion(cameraWorldQuaternion)
+
+      this.cameraUp
+        .set(0, 1, 0)
+        .applyQuaternion(this.cameraQuaternion)
         .normalize();
-      const rayDirection = pointerRayDirection?.clone().normalize();
-      const candidates = [
-        new THREE.Vector3().crossVectors(axisDirection, cameraRight),
-        new THREE.Vector3().crossVectors(axisDirection, cameraUp),
-      ];
+
+      camera.getWorldDirection(this.cameraDirection);
+      this.cameraDirection.normalize();
+
+      /*
+       * ----------------------------------------------------------
+       * POINTER RAY
+       * ----------------------------------------------------------
+       */
+
+      const pointerDirection = pointerRayDirection
+        ? pointerRayDirection.clone().normalize()
+        : this.cameraDirection.clone();
+
+      /*
+       * ----------------------------------------------------------
+       * BUILD TWO POSSIBLE PLANES
+       * ----------------------------------------------------------
+       *
+       * Both planes contain the selected axis.
+       *
+       * axis Ã— cameraRight
+       * axis Ã— cameraUp
+       *
+       * We choose whichever gives the most stable
+       * ray/plane intersection.
+       */
+
+      this.axisPlaneA
+        .crossVectors(this.axisDirection, this.cameraRight)
+        .normalize();
+
+      this.axisPlaneB
+        .crossVectors(this.axisDirection, this.cameraUp)
+        .normalize();
+
+      const candidates = [this.axisPlaneA, this.axisPlaneB];
 
       let bestNormal = null;
-      let bestScore = -1;
+      let bestScore = -Infinity;
 
-      candidates.forEach((candidate) => {
-        if (candidate.lengthSq() < 1e-6) {
-          return;
+      for (const candidate of candidates) {
+        if (candidate.lengthSq() < 1e-8) {
+          continue;
         }
 
-        candidate.normalize();
+        /*
+         * --------------------------------------------------------
+         * RAY ALIGNMENT
+         * --------------------------------------------------------
+         *
+         * A larger absolute dot product means the ray intersects
+         * the plane more directly.
+         *
+         * A value near zero means the ray is almost parallel to
+         * the plane and produces unstable drag movement.
+         */
 
-        const score = rayDirection
-          ? Math.abs(candidate.dot(rayDirection))
-          : 0;
+        const rayAlignment = Math.abs(candidate.dot(pointerDirection));
+
+        /*
+         * --------------------------------------------------------
+         * CAMERA ALIGNMENT
+         * --------------------------------------------------------
+         */
+
+        const cameraAlignment = Math.abs(candidate.dot(this.cameraDirection));
+
+        const score = rayAlignment * 0.75 + cameraAlignment * 0.25;
 
         if (score > bestScore) {
-          bestNormal = candidate;
           bestScore = score;
+          bestNormal = candidate.clone();
         }
-      });
+      }
 
-      if (!bestNormal || bestScore < 1e-6) {
-        // Exact axis-parallel pointer rays have no unique axis drag plane.
-        // Keep the plane valid with a deterministic axis-perpendicular normal.
-        const fallback =
-          Math.abs(axisDirection.y) < 0.9
-            ? new THREE.Vector3(0, 1, 0)
-            : new THREE.Vector3(1, 0, 0);
+      /*
+       * ----------------------------------------------------------
+       * FALLBACK
+       * ----------------------------------------------------------
+       *
+       * This is important when the camera is looking almost
+       * directly along the selected axis.
+       *
+       * Previously the code had:
+       *
+       *     let fallback;
+       *     fallback.set(...)
+       *
+       * which is invalid because fallback was undefined.
+       *
+       * We now reuse this.fallback.
+       */
+
+      if (!bestNormal || bestScore < 0.08) {
+        if (Math.abs(this.axisDirection.y) < 0.9) {
+          this.fallback.set(0, 1, 0);
+        } else {
+          this.fallback.set(1, 0, 0);
+        }
 
         bestNormal = new THREE.Vector3()
-          .crossVectors(axisDirection, fallback)
+          .crossVectors(this.axisDirection, this.fallback)
           .normalize();
       }
 
       normal.copy(bestNormal);
     }
+
+    /*
+     * ============================================================
+     * FINAL PLANE
+     * ============================================================
+     */
+
+    if (normal.lengthSq() < 1e-8) {
+      return null;
+    }
+
+    normal.normalize();
 
     this.plane.setFromNormalAndCoplanarPoint(normal, origin);
 
@@ -2354,40 +4047,113 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\inter
 
 import { useFrame, useThree } from "@react-three/fiber";
 
-import GizmoState from "../GizmoState";
-
 import GizmoRaycaster from "./GizmoRaycaster";
 import GizmoDragPlane from "./GizmoDragPlane";
 import GizmoDragController from "./GizmoDragController";
 import GizmoMoveController from "./GizmoMoveController";
+import GizmoRotateController from "./GizmoRotateController";
+import GizmoScaleController from "./GizmoScaleController";
+
+import GizmoState from "../GizmoState";
 
 export default function GizmoInteraction() {
   const { camera, pointer } = useThree();
 
   useFrame(() => {
-    // ------------------------------------------------------------
-    // Not dragging
-    // ------------------------------------------------------------
+    /*
+     * ============================================================
+     * ROTATE
+     * ============================================================
+     */
+
+    if (GizmoRotateController.isRotating()) {
+      const entity = GizmoRotateController.getEntity();
+
+      if (!entity) {
+        GizmoRotateController.cancel();
+        return;
+      }
+
+      const axis = GizmoRotateController.getAxis();
+      const plane = GizmoRotateController.getRotationPlane();
+      const center = GizmoRotateController.getRotationCenter();
+
+      if (!axis || !plane || !center) {
+        return;
+      }
+
+      const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
+
+      if (!point) {
+        return;
+      }
+
+      GizmoRotateController.update(
+        entity,
+        axis,
+        point,
+        GizmoRotateController.getPointerId(),
+      );
+
+      return;
+    }
+
+    /*
+     * ============================================================
+     * SCALE
+     * ============================================================
+     */
+
+    if (GizmoScaleController.isScaling()) {
+      const entity = GizmoScaleController.getEntity();
+
+      if (!entity) {
+        GizmoScaleController.cancel();
+        return;
+      }
+
+      const axis = GizmoScaleController.getAxis();
+
+      /*
+       * Scale owns the drag plane through GizmoState.
+       */
+      const plane = GizmoState.dragPlane;
+
+      if (!plane || !axis) {
+        return;
+      }
+
+      const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
+
+      if (!point) {
+        return;
+      }
+
+      GizmoScaleController.update(
+        entity,
+        axis,
+        point,
+        GizmoScaleController.getPointerId(),
+      );
+
+      return;
+    }
+
+    /*
+     * ============================================================
+     * MOVE
+     * ============================================================
+     */
 
     if (!GizmoDragController.isDragging()) {
       return;
     }
 
-    // ------------------------------------------------------------
-    // Get drag plane
-    // ------------------------------------------------------------
-
     const plane = GizmoDragPlane.get();
 
     if (!plane) {
-      console.warn("GIZMO INTERACTION: No drag plane");
-
       return;
     }
-
-    // ------------------------------------------------------------
-    // Ray -> Plane intersection
-    // ------------------------------------------------------------
 
     const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
 
@@ -2395,26 +4161,20 @@ export default function GizmoInteraction() {
       return;
     }
 
-    // ------------------------------------------------------------
-    // Calculate drag delta
-    // ------------------------------------------------------------
-
-    const delta = GizmoDragController.update(point);
+    const delta = GizmoDragController.update(
+      point,
+      GizmoDragController.getPointerId(),
+    );
 
     if (!delta) {
       return;
     }
 
-    // ------------------------------------------------------------
-    // MOVE
-    // ------------------------------------------------------------
-
-    console.log("========== MOVE ==========");
-    console.log("Entity:", GizmoState.entity);
-    console.log("Axis:", GizmoState.axis);
-    console.log("Delta:", delta);
-
-    GizmoMoveController.move(GizmoState.entity, GizmoState.axis, delta);
+    GizmoMoveController.move(
+      GizmoDragController.getEntity(),
+      GizmoDragController.getAxis(),
+      delta,
+    );
   });
 
   return null;
@@ -2439,13 +4199,7 @@ class GizmoMoveController {
     this.initialized = false;
   }
 
-  // ============================================================
-  // RESET
-  // ============================================================
-
   reset() {
-    console.log("[GizmoMoveController] RESET");
-
     this.startPosition.set(0, 0, 0);
 
     this.lastDelta.set(0, 0, 0);
@@ -2453,55 +4207,32 @@ class GizmoMoveController {
     this.initialized = false;
   }
 
-  // ============================================================
-  // MOVE
-  // ============================================================
-
   move(entity, axis, delta) {
     if (!entity) {
-      console.warn("[GizmoMoveController] Missing entity");
-      return;
+      return false;
     }
 
     if (!entity.transform) {
-      console.warn("[GizmoMoveController] Entity has no transform", entity);
-      return;
+      return false;
     }
 
     if (!delta) {
-      console.warn("[GizmoMoveController] Missing delta");
-      return;
+      return false;
     }
 
     if (!this.initialized) {
       this.startPosition.copy(entity.transform.position);
 
       this.initialized = true;
-
-      console.log(
-        "[GizmoMoveController] Drag start position:",
-        this.startPosition.clone(),
-      );
     }
 
     const movement = this.getAxisMovement(axis, delta);
 
     if (!movement) {
-      console.warn("[GizmoMoveController] Invalid axis:", axis);
-
-      return;
+      return false;
     }
 
     const nextPosition = this.startPosition.clone().add(movement);
-
-    console.log("[GizmoMoveController] MOVE", {
-      entity: entity.name,
-      axis,
-      delta: delta.clone(),
-      movement: movement.clone(),
-      start: this.startPosition.clone(),
-      next: nextPosition.clone(),
-    });
 
     EditorTransform.setEntityPosition(
       entity,
@@ -2511,11 +4242,9 @@ class GizmoMoveController {
     );
 
     this.lastDelta.copy(movement);
-  }
 
-  // ============================================================
-  // AXIS MOVEMENT
-  // ============================================================
+    return true;
+  }
 
   getAxisMovement(axis, delta) {
     switch (axis) {
@@ -2542,10 +4271,6 @@ class GizmoMoveController {
     }
   }
 
-  // ============================================================
-  // GET DELTA
-  // ============================================================
-
   getDelta() {
     return this.lastDelta.clone();
   }
@@ -2564,8 +4289,41 @@ import * as THREE from "three";
 class GizmoRaycaster {
   constructor() {
     this.raycaster = new THREE.Raycaster();
+
     this.ndc = new THREE.Vector2();
+
     this.intersection = new THREE.Vector3();
+
+    this.lastRay = new THREE.Ray();
+
+    this.lastCamera = null;
+  }
+
+  update(camera, pointer) {
+    if (!camera || !pointer) {
+      return null;
+    }
+
+    this.ndc.set(pointer.x, pointer.y);
+
+    /*
+     * Camera position/orientation may have changed since the
+     * previous render. Force the world matrix to be current
+     * before generating the ray.
+     */
+    camera.updateMatrixWorld(true);
+
+    this.raycaster.setFromCamera(this.ndc, camera);
+
+    this.lastRay.copy(this.raycaster.ray);
+
+    this.lastCamera = camera;
+
+    return this.raycaster.ray;
+  }
+
+  getRay() {
+    return this.lastRay;
   }
 
   intersectPlane(camera, pointer, plane) {
@@ -2573,17 +4331,43 @@ class GizmoRaycaster {
       return null;
     }
 
-    this.ndc.set(pointer.x, pointer.y);
+    const ray = this.update(camera, pointer);
 
-    this.raycaster.setFromCamera(this.ndc, camera);
+    if (!ray) {
+      return null;
+    }
 
-    const hit = this.raycaster.ray.intersectPlane(plane, this.intersection);
+    /*
+     * If the ray is almost parallel to the plane, the intersection
+     * becomes numerically unstable.
+     */
+    const denominator = Math.abs(plane.normal.dot(ray.direction));
+
+    if (denominator < 0.0005) {
+      return null;
+    }
+
+    const hit = ray.intersectPlane(plane, this.intersection);
 
     if (!hit) {
       return null;
     }
 
     return this.intersection.clone();
+  }
+
+  intersectSphere(camera, pointer, sphere, target = this.intersection) {
+    if (!camera || !pointer || !sphere) {
+      return null;
+    }
+
+    const ray = this.update(camera, pointer);
+
+    if (!ray) {
+      return null;
+    }
+
+    return ray.intersectSphere(sphere, target);
   }
 }
 
@@ -2597,64 +4381,721 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\inter
 
 import * as THREE from "three";
 
+import EditorTransform from "../../transform/EditorTransform";
+
+import GizmoState from "../GizmoState";
+
 class GizmoRotateController {
   constructor() {
+    this.entity = null;
+
+    this.axis = null;
+
+    this.rotating = false;
+
     this.startRotation = new THREE.Euler();
 
-    this.lastRotation = new THREE.Euler();
+    this.startVector = new THREE.Vector3();
+
+    this.currentVector = new THREE.Vector3();
+
+    this.rotationPlane = new THREE.Plane();
+
+    this.rotationCenter = new THREE.Vector3();
+
+    this.pointerId = null;
+
+    this.pointerTarget = null;
 
     this.initialized = false;
   }
+
+  // ============================================================
+  // RESET
+  // ============================================================
 
   reset() {
+    this.entity = null;
+
+    this.axis = null;
+
+    this.rotating = false;
+
     this.startRotation.set(0, 0, 0);
 
-    this.lastRotation.set(0, 0, 0);
+    this.startVector.set(0, 0, 0);
+
+    this.currentVector.set(0, 0, 0);
+
+    this.rotationPlane.set(new THREE.Vector3(0, 1, 0), 0);
+
+    this.rotationCenter.set(0, 0, 0);
+
+    this.pointerId = null;
+
+    this.pointerTarget = null;
 
     this.initialized = false;
+
+    GizmoState.transforming = false;
+    GizmoState.axis = null;
+    GizmoState.hoveredAxis = null;
   }
 
-  rotate(entity, axis, angle) {
-    if (!entity) return;
+  // ============================================================
+  // BEGIN
+  // ============================================================
 
-    if (!Number.isFinite(angle)) return;
+  begin(
+    entity,
+    axis,
+    startPoint,
+    center,
+    rotationPlane,
+    pointerId = null,
+    pointerTarget = null,
+  ) {
+    if (!entity) {
+      return false;
+    }
+
+    if (!entity.transform) {
+      return false;
+    }
+
+    if (!startPoint || !center || !rotationPlane) {
+      return false;
+    }
+
+    if (axis !== "x" && axis !== "y" && axis !== "z") {
+      return false;
+    }
+
+    if (this.rotating || GizmoState.transforming) {
+      return false;
+    }
+
+    this.entity = entity;
+
+    this.axis = axis;
+
+    this.rotating = true;
+
+    this.rotationCenter.copy(center);
+
+    this.rotationPlane.copy(rotationPlane);
+
+    this.startRotation.copy(entity.transform.rotation);
+
+    this.startVector.copy(startPoint).sub(center).normalize();
+
+    this.currentVector.copy(this.startVector);
+
+    this.pointerId = pointerId;
+
+    this.pointerTarget = pointerTarget;
+
+    this.initialized = true;
+
+    GizmoState.transforming = true;
+    GizmoState.axis = axis;
+
+    return true;
+  }
+
+  // ============================================================
+  // UPDATE
+  // ============================================================
+
+  update(entity, axis, currentPoint, pointerId = null) {
+    if (!this.rotating) {
+      return false;
+    }
 
     if (!this.initialized) {
-      this.startRotation.copy(entity.transform.rotation);
+      return false;
+    }
 
-      this.initialized = true;
+    if (!entity || entity !== this.entity) {
+      return false;
+    }
+
+    if (axis !== this.axis) {
+      return false;
+    }
+
+    if (
+      this.pointerId !== null &&
+      pointerId !== null &&
+      this.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    if (!currentPoint) {
+      return false;
+    }
+
+    this.currentVector.copy(currentPoint).sub(this.rotationCenter).normalize();
+
+    if (
+      this.startVector.lengthSq() < 1e-8 ||
+      this.currentVector.lengthSq() < 1e-8
+    ) {
+      return false;
+    }
+
+    const axisVector = this.getAxisVector(axis);
+
+    if (!axisVector) {
+      return false;
+    }
+
+    const angle = this.getSignedAngle(
+      this.startVector,
+      this.currentVector,
+      axisVector,
+    );
+
+    if (!Number.isFinite(angle)) {
+      return false;
     }
 
     const rotation = this.startRotation.clone();
 
     switch (axis) {
       case "x":
-        rotation.x += angle;
+        rotation.x = this.startRotation.x + angle;
         break;
 
       case "y":
-        rotation.y += angle;
+        rotation.y = this.startRotation.y + angle;
         break;
 
       case "z":
-        rotation.z += angle;
+        rotation.z = this.startRotation.z + angle;
         break;
 
       default:
-        return;
+        return false;
     }
 
-    entity.transform.setRotation(rotation.x, rotation.y, rotation.z);
+    EditorTransform.setEntityRotation(
+      entity,
+      rotation.x,
+      rotation.y,
+      rotation.z,
+    );
 
-    this.lastRotation.copy(rotation);
+    return true;
   }
 
-  getRotation() {
-    return this.lastRotation.clone();
+  // ============================================================
+  // AXIS
+  // ============================================================
+
+  getAxisVector(axis) {
+    switch (axis) {
+      case "x":
+        return new THREE.Vector3(1, 0, 0);
+
+      case "y":
+        return new THREE.Vector3(0, 1, 0);
+
+      case "z":
+        return new THREE.Vector3(0, 0, 1);
+
+      default:
+        return null;
+    }
+  }
+
+  // ============================================================
+  // SIGNED ANGLE
+  // ============================================================
+
+  getSignedAngle(from, to, axis) {
+    const cross = new THREE.Vector3().crossVectors(from, to);
+
+    const dot = THREE.MathUtils.clamp(from.dot(to), -1, 1);
+
+    /*
+     * atan2 gives us the full signed angle.
+     *
+     * This is better than:
+     *
+     * acos(dot) + Math.sign(...)
+     *
+     * because atan2 handles the sign and the 180-degree
+     * boundary much more reliably.
+     */
+    return Math.atan2(cross.dot(axis), dot);
+  }
+
+  // ============================================================
+  // END / COMMIT
+  // ============================================================
+
+  end(pointerId = null) {
+    if (!this.rotating) {
+      return false;
+    }
+
+    if (
+      this.pointerId !== null &&
+      pointerId !== null &&
+      this.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    this.releasePointerCapture();
+
+    this.reset();
+
+    return true;
+  }
+
+  // ============================================================
+  // CANCEL
+  // ============================================================
+
+  cancel(pointerId = null) {
+    if (!this.rotating) {
+      return false;
+    }
+
+    if (
+      this.pointerId !== null &&
+      pointerId !== null &&
+      this.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    this.releasePointerCapture();
+
+    if (this.entity?.transform) {
+      EditorTransform.setEntityRotation(
+        this.entity,
+        this.startRotation.x,
+        this.startRotation.y,
+        this.startRotation.z,
+      );
+    }
+
+    this.reset();
+
+    return true;
+  }
+
+  // ============================================================
+  // POINTER CAPTURE
+  // ============================================================
+
+  releasePointerCapture() {
+    if (!this.pointerTarget || this.pointerId === null) {
+      return;
+    }
+
+    try {
+      if (
+        typeof this.pointerTarget.hasPointerCapture === "function" &&
+        this.pointerTarget.hasPointerCapture(this.pointerId)
+      ) {
+        this.pointerTarget.releasePointerCapture(this.pointerId);
+      }
+    } catch {
+      // Pointer may already be released.
+    }
+  }
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  isRotating() {
+    return this.rotating;
+  }
+
+  getAxis() {
+    return this.axis;
+  }
+
+  getEntity() {
+    return this.entity;
+  }
+
+  getRotationCenter() {
+    return this.rotationCenter.clone();
+  }
+
+  getRotationPlane() {
+    return this.rotationPlane;
+  }
+
+  getPointerId() {
+    return this.pointerId;
   }
 }
 
 export default new GizmoRotateController();
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\interaction\GizmoScaleController.js
+==============================
+
+import * as THREE from "three";
+
+import EditorTransform from "../../transform/EditorTransform";
+
+import GizmoState from "../GizmoState";
+
+class GizmoScaleController {
+  constructor() {
+    this.entity = null;
+
+    this.axis = null;
+
+    this.scaling = false;
+
+    this.startScale = new THREE.Vector3();
+
+    this.currentPoint = new THREE.Vector3();
+
+    this.startPoint = new THREE.Vector3();
+
+    this.delta = new THREE.Vector3();
+
+    this.nextScale = new THREE.Vector3();
+
+    this.scaleAxis = new THREE.Vector3();
+
+    this.screenAxis = new THREE.Vector3();
+
+    this.cameraQuaternion = new THREE.Quaternion();
+
+    this.pointerId = null;
+
+    this.pointerTarget = null;
+
+    this.dragPlane = null;
+
+    this.initialized = false;
+  }
+
+  // ============================================================
+  // BEGIN
+  // ============================================================
+
+  begin(
+    entity,
+    axis,
+    startPoint,
+    camera,
+    plane,
+    pointerId = null,
+    pointerTarget = null,
+  ) {
+    if (!entity?.transform) {
+      return false;
+    }
+
+    if (!startPoint || !camera || !plane) {
+      return false;
+    }
+
+    if (axis !== "x" && axis !== "y" && axis !== "z" && axis !== "xyz") {
+      return false;
+    }
+
+    if (this.scaling || GizmoState.transforming) {
+      return false;
+    }
+
+    this.entity = entity;
+
+    this.axis = axis;
+
+    this.scaling = true;
+
+    this.startScale.copy(entity.transform.scale);
+
+    this.startPoint.copy(startPoint);
+
+    this.currentPoint.copy(startPoint);
+
+    this.delta.set(0, 0, 0);
+
+    this.pointerId = pointerId;
+
+    this.pointerTarget = pointerTarget;
+
+    this.dragPlane = plane;
+
+    this.cameraQuaternion.copy(
+      camera.getWorldQuaternion(this.cameraQuaternion),
+    );
+
+    this.screenAxis
+      .set(0, 1, 0)
+      .applyQuaternion(this.cameraQuaternion)
+      .normalize();
+
+    if (axis === "xyz") {
+      this.scaleAxis.copy(this.screenAxis);
+    } else {
+      const axisVector = this.getAxisVector(axis);
+
+      if (!axisVector) {
+        this.reset();
+
+        return false;
+      }
+
+      this.scaleAxis.copy(axisVector);
+    }
+
+    this.initialized = true;
+
+    GizmoState.transforming = true;
+
+    GizmoState.axis = axis;
+
+    GizmoState.dragPlane = plane;
+
+    return true;
+  }
+
+  // ============================================================
+  // UPDATE
+  // ============================================================
+
+  update(entity, axis, currentPoint, pointerId = null) {
+    if (!this.scaling || !this.initialized) {
+      return false;
+    }
+
+    if (!entity || entity !== this.entity) {
+      return false;
+    }
+
+    if (axis !== this.axis) {
+      return false;
+    }
+
+    if (
+      this.pointerId !== null &&
+      pointerId !== null &&
+      this.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    if (!currentPoint) {
+      return false;
+    }
+
+    this.currentPoint.copy(currentPoint);
+
+    this.delta.subVectors(this.currentPoint, this.startPoint);
+
+    const amount = this.delta.dot(this.scaleAxis);
+
+    const factor = Math.max(0.01, 1 + amount);
+
+    this.nextScale.copy(this.startScale);
+
+    if (axis === "xyz") {
+      this.nextScale.multiplyScalar(factor);
+    } else if (axis === "x") {
+      this.nextScale.x = Math.max(0.01, this.startScale.x * factor);
+    } else if (axis === "y") {
+      this.nextScale.y = Math.max(0.01, this.startScale.y * factor);
+    } else if (axis === "z") {
+      this.nextScale.z = Math.max(0.01, this.startScale.z * factor);
+    }
+
+    EditorTransform.setEntityScale(
+      entity,
+      this.nextScale.x,
+      this.nextScale.y,
+      this.nextScale.z,
+    );
+
+    return true;
+  }
+
+  // ============================================================
+  // AXIS
+  // ============================================================
+
+  getAxisVector(axis) {
+    switch (axis) {
+      case "x":
+        return new THREE.Vector3(1, 0, 0);
+
+      case "y":
+        return new THREE.Vector3(0, 1, 0);
+
+      case "z":
+        return new THREE.Vector3(0, 0, 1);
+
+      default:
+        return null;
+    }
+  }
+
+  // ============================================================
+  // END
+  // ============================================================
+
+  end(pointerId = null) {
+    if (!this.scaling) {
+      return false;
+    }
+
+    if (
+      this.pointerId !== null &&
+      pointerId !== null &&
+      this.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    this.releasePointerCapture();
+
+    this.reset();
+
+    return true;
+  }
+
+  // ============================================================
+  // CANCEL
+  // ============================================================
+
+  cancel(pointerId = null) {
+    if (!this.scaling) {
+      return false;
+    }
+
+    if (
+      this.pointerId !== null &&
+      pointerId !== null &&
+      this.pointerId !== pointerId
+    ) {
+      return false;
+    }
+
+    this.releasePointerCapture();
+
+    if (this.entity?.transform) {
+      EditorTransform.setEntityScale(
+        this.entity,
+        this.startScale.x,
+        this.startScale.y,
+        this.startScale.z,
+      );
+    }
+
+    this.reset();
+
+    return true;
+  }
+
+  // ============================================================
+  // RESET
+  // ============================================================
+
+  reset() {
+    this.entity = null;
+
+    this.axis = null;
+
+    this.scaling = false;
+
+    this.startScale.set(1, 1, 1);
+
+    this.currentPoint.set(0, 0, 0);
+
+    this.startPoint.set(0, 0, 0);
+
+    this.delta.set(0, 0, 0);
+
+    this.nextScale.set(1, 1, 1);
+
+    this.scaleAxis.set(0, 0, 0);
+
+    this.screenAxis.set(0, 1, 0);
+
+    this.cameraQuaternion.identity();
+
+    this.pointerId = null;
+
+    this.pointerTarget = null;
+
+    this.dragPlane = null;
+
+    this.initialized = false;
+
+    GizmoState.dragPlane = null;
+
+    GizmoState.transforming = false;
+
+    GizmoState.axis = null;
+
+    GizmoState.hoveredAxis = null;
+  }
+
+  // ============================================================
+  // POINTER CAPTURE
+  // ============================================================
+
+  releasePointerCapture() {
+    if (!this.pointerTarget || this.pointerId === null) {
+      return;
+    }
+
+    try {
+      if (
+        typeof this.pointerTarget.hasPointerCapture === "function" &&
+        this.pointerTarget.hasPointerCapture(this.pointerId)
+      ) {
+        this.pointerTarget.releasePointerCapture(this.pointerId);
+      }
+    } catch {
+      // Pointer may already be released.
+    }
+  }
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  isScaling() {
+    return this.scaling;
+  }
+
+  getAxis() {
+    return this.axis;
+  }
+
+  getEntity() {
+    return this.entity;
+  }
+
+  getDragPlane() {
+    return this.dragPlane;
+  }
+
+  getPointerId() {
+    return this.pointerId;
+  }
+}
+
+export default new GizmoScaleController();
 
 
 
@@ -2666,41 +5107,17 @@ import { Cone } from "@react-three/drei";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
 
-export default function MoveArrow({
-  color,
-
-  position,
-
-  rotation,
-
-  axis,
-
-  onPointerDown,
-
-  onPointerOver,
-
-  onPointerOut,
-}) {
-  const handlePointerDown = (event) => {
-    onPointerDown?.(event, axis);
-  };
-
-  const handlePointerOver = (event) => {
-    onPointerOver?.(event, axis);
-  };
-
-  const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
-  };
-
+export default function MoveArrow({ color, position, rotation }) {
   return (
     <Cone
-      args={[0.08, 0.18, 16]}
+      args={[0.07, 0.16, 16]}
       position={position}
       rotation={rotation}
-      onPointerDown={handlePointerDown}
-      onPointerOver={handlePointerOver}
-      onPointerOut={handlePointerOut}
+      raycast={() => null}
+      userData={{
+        gizmo: true,
+        gizmoVisual: true,
+      }}
     >
       <primitive object={GizmoMaterial.get(color)} attach="material" />
     </Cone>
@@ -2719,21 +5136,25 @@ import * as THREE from "three";
 import MoveArrow from "./MoveArrow";
 import GizmoMaterial from "../shared/GizmoMaterial";
 
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
+
 export default function MoveAxis({
   axis,
-
   color,
-
   rotation,
-
   arrowPosition,
-
+  highlighted,
+  hidden,
   onPointerDown,
-
   onPointerOver,
-
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -2743,19 +5164,30 @@ export default function MoveAxis({
   };
 
   const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
+    onPointerOut?.(event);
   };
 
   return (
     <group rotation={rotation}>
+      {/* ================================================== */}
+      {/* POINTER HIT AREA â€” ONLY INTERACTIVE GEOMETRY      */}
+      {/* ================================================== */}
+
       <mesh
         name={`MoveAxisHit:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "move-axis",
+        }}
         position={[0, 0.525, 0]}
         onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <cylinderGeometry args={[0.1, 0.1, 1.05, 8]} />
+        <cylinderGeometry args={[0.16, 0.16, 1.1, 12]} />
+
         <meshBasicMaterial
           transparent
           opacity={0}
@@ -2765,24 +5197,28 @@ export default function MoveAxis({
         />
       </mesh>
 
+      {/* ================================================== */}
+      {/* VISIBLE AXIS â€” VISUAL ONLY                        */}
+      {/* ================================================== */}
+
       <Cylinder
-        args={[0.02, 0.02, 0.8, 8]}
+        args={[0.018, 0.018, 0.8, 8]}
         position={[0, 0.4, 0]}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
+        raycast={() => null}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoVisual: true,
+        }}
       >
-        <primitive object={GizmoMaterial.get(color)} attach="material" />
+        <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Cylinder>
 
-      <MoveArrow
-        color={color}
-        position={arrowPosition}
-        axis={axis}
-        onPointerDown={handlePointerDown}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-      />
+      {/* ================================================== */}
+      {/* VISIBLE ARROW â€” VISUAL ONLY                       */}
+      {/* ================================================== */}
+
+      <MoveArrow color={displayColor} position={arrowPosition} axis={axis} />
     </group>
   );
 }
@@ -2801,8 +5237,9 @@ import MovePlane from "./MovePlane";
 
 import { GIZMO_COLORS, GIZMO_AXIS } from "../shared/GizmoConstants";
 
-const planeInnerOffset = 0.08;
-const visualPlaneSize = 0.32;
+const planeInnerOffset = 0.2;
+
+const visualPlaneSize = 0.28;
 const hitPlaneSize = 0.42;
 
 const visualPlaneCenter = planeInnerOffset + visualPlaneSize / 2;
@@ -2811,6 +5248,8 @@ const hitPlaneCenter = planeInnerOffset + hitPlaneSize / 2;
 
 export default function MoveGizmo({
   entity,
+  activeAxis,
+  isHighlighted,
   onPointerDown,
   onPointerOver,
   onPointerOut,
@@ -2825,13 +5264,25 @@ export default function MoveGizmo({
     group.current.position.copy(entity.transform.position);
   });
 
-  return (
-    <group ref={group} name="MoveGizmo" scale={[2.5, 2.5, 2.5]}>
-      {/* X AXIS */}
+  const isHidden = (axis) => {
+    return activeAxis !== null && activeAxis !== axis;
+  };
 
+  return (
+    <group
+      ref={group}
+      name="MoveGizmo"
+      userData={{
+        gizmo: true,
+        gizmoMode: "move",
+      }}
+      scale={[2, 2, 2]}
+    >
       <MoveAxis
         axis={GIZMO_AXIS.X}
         color={GIZMO_COLORS.X}
+        highlighted={isHighlighted(GIZMO_AXIS.X)}
+        hidden={isHidden(GIZMO_AXIS.X)}
         rotation={[0, 0, -Math.PI / 2]}
         arrowPosition={[0, 0.9, 0]}
         onPointerDown={onPointerDown}
@@ -2839,11 +5290,11 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* Y AXIS */}
-
       <MoveAxis
         axis={GIZMO_AXIS.Y}
         color={GIZMO_COLORS.Y}
+        highlighted={isHighlighted(GIZMO_AXIS.Y)}
+        hidden={isHidden(GIZMO_AXIS.Y)}
         rotation={[0, 0, 0]}
         arrowPosition={[0, 0.9, 0]}
         onPointerDown={onPointerDown}
@@ -2851,11 +5302,11 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* Z AXIS */}
-
       <MoveAxis
         axis={GIZMO_AXIS.Z}
         color={GIZMO_COLORS.Z}
+        highlighted={isHighlighted(GIZMO_AXIS.Z)}
+        hidden={isHidden(GIZMO_AXIS.Z)}
         rotation={[Math.PI / 2, 0, 0]}
         arrowPosition={[0, 0.9, 0]}
         onPointerDown={onPointerDown}
@@ -2863,11 +5314,11 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* XY PLANE */}
-
       <MovePlane
         axis={GIZMO_AXIS.XY}
         color={GIZMO_COLORS.X}
+        highlighted={isHighlighted(GIZMO_AXIS.XY)}
+        hidden={isHidden(GIZMO_AXIS.XY)}
         visualSize={visualPlaneSize}
         hitSize={hitPlaneSize}
         visualPosition={[visualPlaneCenter, visualPlaneCenter, 0]}
@@ -2877,11 +5328,11 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* XZ PLANE */}
-
       <MovePlane
         axis={GIZMO_AXIS.XZ}
         color={GIZMO_COLORS.Y}
+        highlighted={isHighlighted(GIZMO_AXIS.XZ)}
+        hidden={isHidden(GIZMO_AXIS.XZ)}
         rotation={[Math.PI / 2, 0, 0]}
         visualSize={visualPlaneSize}
         hitSize={hitPlaneSize}
@@ -2892,11 +5343,11 @@ export default function MoveGizmo({
         onPointerOut={onPointerOut}
       />
 
-      {/* YZ PLANE */}
-
       <MovePlane
         axis={GIZMO_AXIS.YZ}
         color={GIZMO_COLORS.Z}
+        highlighted={isHighlighted(GIZMO_AXIS.YZ)}
+        hidden={isHidden(GIZMO_AXIS.YZ)}
         rotation={[0, Math.PI / 2, 0]}
         visualSize={visualPlaneSize}
         hitSize={hitPlaneSize}
@@ -2926,6 +5377,8 @@ import * as THREE from "three";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
 
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
+
 export default function MovePlane({
   axis,
   color,
@@ -2934,10 +5387,18 @@ export default function MovePlane({
   visualPosition,
   hitPosition,
   rotation,
+  highlighted,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -2947,21 +5408,43 @@ export default function MovePlane({
   };
 
   const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
+    onPointerOut?.(event);
   };
 
   return (
     <>
-      <mesh position={visualPosition} rotation={rotation}>
+      {/* ====================================================== */}
+      {/* VISIBLE PLANE                                         */}
+      {/* ====================================================== */}
+
+      <mesh
+        name={`MovePlane:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
+        position={visualPosition}
+        rotation={rotation}
+        raycast={() => null}
+      >
         <planeGeometry args={[visualSize, visualSize]} />
+
         <primitive
-          object={GizmoMaterial.getTransparent(color)}
+          object={GizmoMaterial.getTransparent(displayColor)}
           attach="material"
         />
       </mesh>
 
+      {/* ====================================================== */}
+      {/* LARGE PLANE HIT AREA                                   */}
+      {/* ====================================================== */}
+
       <mesh
         name={`MovePlaneHit:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
         position={hitPosition}
         rotation={rotation}
         onPointerDown={handlePointerDown}
@@ -2969,6 +5452,7 @@ export default function MovePlane({
         onPointerOut={handlePointerOut}
       >
         <planeGeometry args={[hitSize, hitSize]} />
+
         <meshBasicMaterial
           transparent
           opacity={0}
@@ -2987,49 +5471,183 @@ export default function MovePlane({
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Rotate\RotateGizmo.jsx
 ==============================
 
-import { useMemo } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+
+import { useRef, useState } from "react";
+
+import * as THREE from "three";
 
 import RotateRing from "./RotateRing";
 
 import { GIZMO_AXIS, GIZMO_COLORS } from "../shared/GizmoConstants";
 
+const GIZMO_SCALE = 1.6;
+
+/*
+ * Shared rotation-ring radius.
+ *
+ * This value is now actually passed to RotateRing.
+ */
+const RING_RADIUS = 1.0;
+
+/*
+ * Slightly larger than the visible ring.
+ *
+ * This is only the hover/selection sphere.
+ */
+const HOVER_SPHERE_RADIUS = 1.12;
+
 export default function RotateGizmo({
   entity,
+  hoveredAxis,
+  activeAxis,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
-  const position = useMemo(() => {
-    if (!entity?.getObject) {
-      return [0, 0, 0];
+  const group = useRef();
+
+  const { camera, pointer } = useThree();
+
+  const [sphereHovered, setSphereHovered] = useState(false);
+
+  const sphere = useRef(
+    new THREE.Sphere(new THREE.Vector3(), HOVER_SPHERE_RADIUS),
+  );
+
+  const hitPoint = useRef(new THREE.Vector3());
+
+  const raycaster = useRef(new THREE.Raycaster());
+
+  useFrame(() => {
+    if (!group.current || !entity?.transform) {
+      return;
     }
 
-    return entity.getObject().position.toArray();
-  }, [entity]);
+    group.current.position.copy(entity.transform.position);
+
+    /*
+     * Do not perform sphere hover checks while a ring is locked.
+     */
+    if (activeAxis !== null) {
+      if (sphereHovered) {
+        setSphereHovered(false);
+      }
+
+      return;
+    }
+
+    sphere.current.center.copy(entity.transform.position);
+
+    sphere.current.radius = HOVER_SPHERE_RADIUS * GIZMO_SCALE;
+
+    /*
+     * Use the ACTUAL R3F pointer.
+     *
+     * Do not use camera.userData.__gizmoPointer.
+     */
+    raycaster.current.setFromCamera(pointer, camera);
+
+    const hit = raycaster.current.ray.intersectSphere(
+      sphere.current,
+      hitPoint.current,
+    );
+
+    const nextHovered = Boolean(hit);
+
+    if (nextHovered !== sphereHovered) {
+      setSphereHovered(nextHovered);
+    }
+  });
+
+  const isHidden = (axis) => {
+    return activeAxis !== null && activeAxis !== axis;
+  };
+
+  const showSphereHover =
+    sphereHovered && hoveredAxis === null && activeAxis === null;
 
   return (
-    <group position={position}>
+    <group
+      ref={group}
+      name="RotateGizmo"
+      userData={{
+        gizmo: true,
+        gizmoMode: "rotate",
+      }}
+      scale={[GIZMO_SCALE, GIZMO_SCALE, GIZMO_SCALE]}
+    >
+      {/* ================================================== */}
+      {/* OUTER HOVER SPHERE                                */}
+      {/* ================================================== */}
+
+      <mesh
+        name="RotateGizmoHoverSphere"
+        raycast={() => null}
+        userData={{
+          gizmo: true,
+          gizmoSurface: "rotateSphere",
+          gizmoVisual: true,
+        }}
+      >
+        <sphereGeometry args={[HOVER_SPHERE_RADIUS, 24, 16]} />
+
+        <meshBasicMaterial
+          transparent
+          opacity={showSphereHover ? 0.08 : 0}
+          color={GIZMO_COLORS.ROTATE_HOVER}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* ================================================== */}
+      {/* X RING                                            */}
+      {/* ================================================== */}
+
       <RotateRing
         axis={GIZMO_AXIS.X}
+        radius={RING_RADIUS}
         color={GIZMO_COLORS.X}
+        hovered={hoveredAxis === GIZMO_AXIS.X}
+        active={activeAxis === GIZMO_AXIS.X}
+        hidden={isHidden(GIZMO_AXIS.X)}
         rotation={[0, Math.PI / 2, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
       />
 
+      {/* ================================================== */}
+      {/* Y RING                                            */}
+      {/* ================================================== */}
+
       <RotateRing
         axis={GIZMO_AXIS.Y}
+        radius={RING_RADIUS}
         color={GIZMO_COLORS.Y}
+        hovered={hoveredAxis === GIZMO_AXIS.Y}
+        active={activeAxis === GIZMO_AXIS.Y}
+        hidden={isHidden(GIZMO_AXIS.Y)}
         rotation={[Math.PI / 2, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
         onPointerOut={onPointerOut}
       />
 
+      {/* ================================================== */}
+      {/* Z RING                                            */}
+      {/* ================================================== */}
+
       <RotateRing
         axis={GIZMO_AXIS.Z}
+        radius={RING_RADIUS}
         color={GIZMO_COLORS.Z}
+        hovered={hoveredAxis === GIZMO_AXIS.Z}
+        active={activeAxis === GIZMO_AXIS.Z}
+        hidden={isHidden(GIZMO_AXIS.Z)}
         rotation={[0, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -3055,14 +5673,34 @@ import { Torus } from "@react-three/drei";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
 
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
+
+const HIT_TUBE_RADIUS = 0.12;
+
+const VISUAL_TUBE_RADIUS = 0.022;
+
 export default function RotateRing({
   axis,
+  radius,
   color,
   rotation,
+  hovered,
+  active,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
+  const displayColor = active
+    ? GIZMO_COLORS.HOVER
+    : hovered
+      ? GIZMO_COLORS.ROTATE_HOVER
+      : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -3072,19 +5710,52 @@ export default function RotateRing({
   };
 
   const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
+    onPointerOut?.(event);
   };
 
   return (
-    <Torus
-      args={[1.2, 0.015, 12, 64]}
-      rotation={rotation}
-      onPointerDown={handlePointerDown}
-      onPointerOver={handlePointerOver}
-      onPointerOut={handlePointerOut}
-    >
-      <primitive object={GizmoMaterial.get(color)} attach="material" />
-    </Torus>
+    <group rotation={rotation}>
+      {/* ================================================== */}
+      {/* RING HIT AREA                                     */}
+      {/* ================================================== */}
+
+      <Torus
+        args={[radius, HIT_TUBE_RADIUS, 12, 64]}
+        name={`RotateRingHit:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "rotate-ring",
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </Torus>
+
+      {/* ================================================== */}
+      {/* VISIBLE RING                                     */}
+      {/* ================================================== */}
+
+      <Torus
+        args={[radius, VISUAL_TUBE_RADIUS, 12, 64]}
+        raycast={() => null}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoVisual: true,
+        }}
+      >
+        <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
+      </Torus>
+    </group>
   );
 }
 
@@ -3094,18 +5765,30 @@ export default function RotateRing({
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Scale\ScaleAxis.jsx
 ==============================
 
-import { Cylinder, Box } from "@react-three/drei";
+import { Box, Cylinder } from "@react-three/drei";
+
+import * as THREE from "three";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
+
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
 
 export default function ScaleAxis({
   axis,
   color,
   rotation,
+  highlighted,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -3115,29 +5798,99 @@ export default function ScaleAxis({
   };
 
   const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
+    onPointerOut?.(event);
   };
 
   return (
     <group rotation={rotation}>
-      <Cylinder
-        args={[0.015, 0.015, 0.9]}
+      {/* ================================================== */}
+      {/* AXIS HIT AREA                                     */}
+      {/* ================================================== */}
+
+      <mesh
+        name={`ScaleAxisHit:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "scale-axis",
+        }}
         position={[0, 0.45, 0]}
         onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <primitive object={GizmoMaterial.get(color)} attach="material" />
+        <cylinderGeometry args={[0.16, 0.16, 0.95, 12]} />
+
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* ================================================== */}
+      {/* VISIBLE AXIS                                      */}
+      {/* ================================================== */}
+
+      <Cylinder
+        args={[0.022, 0.022, 0.9, 8]}
+        position={[0, 0.45, 0]}
+        raycast={() => null}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoVisual: true,
+        }}
+      >
+        <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Cylinder>
 
-      <Box
-        args={[0.08, 0.08, 0.08]}
+      {/* ================================================== */}
+      {/* SCALE CUBE HIT                                    */}
+      {/* ================================================== */}
+
+      <mesh
+        name={`ScaleCubeHit:${axis}`}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoHit: true,
+          gizmoType: "scale-cube",
+        }}
         position={[0, 0.95, 0]}
         onPointerDown={handlePointerDown}
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <primitive object={GizmoMaterial.get(color)} attach="material" />
+        <boxGeometry args={[0.25, 0.25, 0.25]} />
+
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* ================================================== */}
+      {/* VISIBLE SCALE CUBE                                */}
+      {/* ================================================== */}
+
+      <Box
+        args={[0.1, 0.1, 0.1]}
+        position={[0, 0.95, 0]}
+        raycast={() => null}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+          gizmoVisual: true,
+        }}
+      >
+        <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
       </Box>
     </group>
   );
@@ -3150,17 +5903,28 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Scale
 ==============================
 
 import { Box } from "@react-three/drei";
+import * as THREE from "three";
 
 import GizmoMaterial from "../shared/GizmoMaterial";
+
+import { GIZMO_COLORS } from "../shared/GizmoConstants";
 
 export default function ScaleCube({
   axis,
   color,
   position,
+  highlighted,
+  hidden,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
+  if (hidden) {
+    return null;
+  }
+
+  const displayColor = highlighted ? GIZMO_COLORS.HOVER : color;
+
   const handlePointerDown = (event) => {
     onPointerDown?.(event, axis);
   };
@@ -3170,19 +5934,55 @@ export default function ScaleCube({
   };
 
   const handlePointerOut = (event) => {
-    onPointerOut?.(event, axis);
+    onPointerOut?.(event);
   };
 
   return (
-    <Box
-      args={[0.15, 0.15, 0.15]}
-      position={position}
-      onPointerDown={handlePointerDown}
-      onPointerOver={handlePointerOver}
-      onPointerOut={handlePointerOut}
-    >
-      <primitive object={GizmoMaterial.get(color)} attach="material" />
-    </Box>
+    <>
+      {/* ====================================================== */}
+      {/* CENTER HIT AREA                                        */}
+      {/* ====================================================== */}
+
+      <mesh
+        name="ScaleCenterHit"
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
+        position={position}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <boxGeometry args={[0.28, 0.28, 0.28]} />
+
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* ====================================================== */}
+      {/* VISIBLE CENTER / XYZ HANDLE                            */}
+      {/* ====================================================== */}
+
+      <Box
+        args={[0.18, 0.18, 0.18]}
+        position={position}
+        userData={{
+          gizmo: true,
+          gizmoAxis: axis,
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <primitive object={GizmoMaterial.get(displayColor)} attach="material" />
+      </Box>
+    </>
   );
 }
 
@@ -3192,32 +5992,53 @@ export default function ScaleCube({
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\gizmos\Scale\ScaleGizmo.jsx
 ==============================
 
-import { useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
 
 import ScaleAxis from "./ScaleAxis";
+import ScaleCube from "./ScaleCube";
 
 import { GIZMO_AXIS, GIZMO_COLORS } from "../shared/GizmoConstants";
-import ScaleCube from "./ScaleCube";
 
 export default function ScaleGizmo({
   entity,
+  activeAxis,
+  isHighlighted,
   onPointerDown,
   onPointerOver,
   onPointerOut,
 }) {
-  const position = useMemo(() => {
-    if (!entity?.getObject) {
-      return [0, 0, 0];
+  const group = useRef();
+
+  useFrame(() => {
+    if (!group.current || !entity?.transform) {
+      return;
     }
 
-    return entity.getObject().position.toArray();
-  }, [entity]);
+    group.current.position.copy(entity.transform.position);
+  });
+
+  const isHidden = (axis) => {
+    return activeAxis !== null && activeAxis !== axis;
+  };
+
+  const centerHidden = activeAxis !== null && activeAxis !== GIZMO_AXIS.XYZ;
 
   return (
-    <group position={position}>
+    <group
+      ref={group}
+      name="ScaleGizmo"
+      userData={{
+        gizmo: true,
+        gizmoMode: "scale",
+      }}
+      scale={[2, 2, 2]}
+    >
       <ScaleAxis
         axis={GIZMO_AXIS.X}
         color={GIZMO_COLORS.X}
+        highlighted={isHighlighted(GIZMO_AXIS.X)}
+        hidden={isHidden(GIZMO_AXIS.X)}
         rotation={[0, 0, -Math.PI / 2]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -3227,6 +6048,8 @@ export default function ScaleGizmo({
       <ScaleAxis
         axis={GIZMO_AXIS.Y}
         color={GIZMO_COLORS.Y}
+        highlighted={isHighlighted(GIZMO_AXIS.Y)}
+        hidden={isHidden(GIZMO_AXIS.Y)}
         rotation={[0, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -3236,6 +6059,8 @@ export default function ScaleGizmo({
       <ScaleAxis
         axis={GIZMO_AXIS.Z}
         color={GIZMO_COLORS.Z}
+        highlighted={isHighlighted(GIZMO_AXIS.Z)}
+        hidden={isHidden(GIZMO_AXIS.Z)}
         rotation={[Math.PI / 2, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -3245,6 +6070,8 @@ export default function ScaleGizmo({
       <ScaleCube
         axis={GIZMO_AXIS.XYZ}
         color={GIZMO_COLORS.CENTER}
+        highlighted={isHighlighted(GIZMO_AXIS.XYZ)}
+        hidden={centerHidden}
         position={[0, 0, 0]}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -3291,8 +6118,14 @@ export const GIZMO_COLORS = {
   X: "#ff4d4d",
   Y: "#55ff55",
   Z: "#5599ff",
+
   CENTER: "#ffffff",
+
+  // General active/selected highlight.
   HOVER: "#ffff00",
+
+  // Softer rotate hover.
+  ROTATE_HOVER: "#d8d8d8",
 };
 
 export const GIZMO_SIZE = 1;
@@ -3804,35 +6637,7 @@ export default function EditorEntity({
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\selection\EditorOutline.jsx
 ==============================
 
-import { useEffect, useState } from "react";
-
-import { EventBus, EngineEvents } from "../../events";
-
 export default function EditorOutline() {
-  const [entity, setEntity] = useState(null);
-
-  useEffect(() => {
-    EventBus.on(
-      EngineEvents.ENTITY_SELECTED,
-
-      setEntity,
-    );
-
-    EventBus.on(
-      EngineEvents.ENTITY_DESELECTED,
-
-      () => setEntity(null),
-    );
-
-    return () => {
-      EventBus.off(
-        EngineEvents.ENTITY_SELECTED,
-
-        setEntity,
-      );
-    };
-  }, []);
-
   return null;
 }
 
@@ -3843,33 +6648,47 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\selection\Ed
 ==============================
 
 import { useEffect, useRef } from "react";
+
 import { useThree } from "@react-three/fiber";
+
 import * as THREE from "three";
 
 import EditorSelection from "./EditorSelection";
-import GizmoDragController from "../gizmos/interaction/GizmoDragController";
+
+import GizmoController from "../gizmos/GizmoController";
 
 import EntityManager from "../../entity/EntityManager";
 
+function isGizmoObject(object) {
+  let current = object;
+
+  while (current) {
+    if (current.userData?.gizmo) {
+      return true;
+    }
+
+    current = current.parent;
+  }
+
+  return false;
+}
+
 export default function EditorRaycaster() {
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
 
   const raycaster = useRef(new THREE.Raycaster());
+
   const pointer = useRef(new THREE.Vector2());
 
   useEffect(() => {
     function onPointerDown(event) {
-      // ============================================================
-      // LEFT MOUSE BUTTON ONLY
-      // ============================================================
-
       if (event.button !== 0) {
         return;
       }
 
-      // ============================================================
-      // IGNORE NOVA EDITOR UI
-      // ============================================================
+      if (GizmoController.isTransforming()) {
+        return;
+      }
 
       const target = event.target;
 
@@ -3880,39 +6699,16 @@ export default function EditorRaycaster() {
         return;
       }
 
-      // ============================================================
-      // IGNORE GIZMO DRAG
-      // ============================================================
+      const rect = gl.domElement.getBoundingClientRect();
 
-      if (GizmoDragController.isDragging()) {
-        return;
-      }
+      pointer.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
 
-      // ============================================================
-      // POINTER -> NDC
-      // ============================================================
+      pointer.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-      const rect = event.target?.getBoundingClientRect?.();
-
-      if (rect) {
-        pointer.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-
-        pointer.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      } else {
-        pointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
-
-        pointer.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
-      }
-
-      // ============================================================
-      // UPDATE RAY
-      // ============================================================
-
+      camera.updateMatrixWorld();
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
       raycaster.current.setFromCamera(pointer.current, camera);
-
-      // ============================================================
-      // COLLECT RAYCASTABLE MESHES
-      // ============================================================
 
       const meshes = [];
 
@@ -3925,127 +6721,56 @@ export default function EditorRaycaster() {
           return;
         }
 
+        if (object.type === "Sky" || object.type === "Sky2") {
+          return;
+        }
+
         meshes.push(object);
       });
 
-      // ============================================================
-      // RAYCAST
-      // ============================================================
-
       const intersects = raycaster.current.intersectObjects(meshes, false);
 
-      // ============================================================
-      // FILTER INVALID HITS
-      // ============================================================
-
-      const hits = intersects.filter((hit) => {
-        const object = hit.object;
-
-        if (!object) {
-          return false;
-        }
-
-        if (object.userData.ignoreRaycast) {
-          return false;
-        }
-
-        if (object.type === "Sky" || object.type === "Sky2") {
-          return false;
-        }
-
-        return true;
-      });
-
-      // ============================================================
-      // DEBUG
-      // ============================================================
-
-      console.group("========== RAYCAST ==========");
-
-      console.log("Hits:", hits.length);
-
-      // ============================================================
-      // NOTHING HIT
-      // ============================================================
-
-      if (!hits.length) {
-        console.log("Nothing hit");
-
-        console.groupEnd();
-
+      if (!intersects.length) {
         EditorSelection.clearSelection();
 
         return;
       }
 
-      // ============================================================
-      // LOG ALL HITS
-      // ============================================================
+      // ========================================================
+      // GIZMO OWNS THIS CLICK
+      // ========================================================
 
-      hits.forEach((hit, index) => {
-        console.log("-------------------------");
+      const nearestHit = intersects[0];
 
-        console.log("HIT", index);
+      if (nearestHit?.object && isGizmoObject(nearestHit.object)) {
+        return;
+      }
 
-        console.log("Mesh UUID :", hit.object.uuid);
-
-        console.log("Mesh Name :", hit.object.name);
-
-        console.log("Mesh Type :", hit.object.type);
-
-        console.log("Distance  :", hit.distance);
-
-        console.log("UserData  :", hit.object.userData);
-      });
-
-      // ============================================================
-      // FIND ENTITY FROM HIT
-      // ============================================================
+      // ========================================================
+      // FIND ENTITY
+      // ========================================================
 
       let selectedEntity = null;
-      let selectedObject = null;
 
-      /*
-       * IMPORTANT:
-       *
-       * We check EVERY hit, not only hits[0].
-       *
-       * This matters because a visual mesh may be sitting above
-       * another selectable entity.
-       *
-       * The first hit that actually belongs to a Nova Entity
-       * becomes the selection.
-       */
-
-      for (const hit of hits) {
+      for (const hit of intersects) {
         let object = hit.object;
 
-        // ----------------------------------------------------------
-        // Walk up the Three.js hierarchy
-        // ----------------------------------------------------------
+        if (isGizmoObject(object)) {
+          continue;
+        }
 
         while (object) {
-          // --------------------------------------------------------
-          // Direct Entity reference
-          // --------------------------------------------------------
-
           if (object.userData?.entity) {
             selectedEntity = object.userData.entity;
-            selectedObject = object;
 
             break;
           }
-
-          // --------------------------------------------------------
-          // Entity UUID reference
-          // --------------------------------------------------------
 
           if (object.userData?.entityUUID) {
             const entity = EntityManager.getByUUID(object.userData.entityUUID);
 
             if (entity) {
               selectedEntity = entity;
-              selectedObject = object;
 
               break;
             }
@@ -4059,62 +6784,21 @@ export default function EditorRaycaster() {
         }
       }
 
-      // ============================================================
-      // NO ENTITY FOUND
-      // ============================================================
-
       if (!selectedEntity) {
-        console.warn(
-          "Raycast hit a render object, but that object is not attached to a Nova Entity.",
-        );
-
-        console.warn(
-          "Selection requires userData.entity or userData.entityUUID.",
-        );
-
-        console.groupEnd();
-
         EditorSelection.clearSelection();
 
         return;
       }
 
-      // ============================================================
-      // ENTITY FOUND
-      // ============================================================
-
-      console.log("");
-
-      console.log("FOUND ENTITY");
-
-      console.table({
-        id: selectedEntity.id,
-        uuid: selectedEntity.uuid,
-        name: selectedEntity.name,
-        type: selectedEntity.type,
-      });
-
-      console.log("Selected Render Object:", selectedObject);
-
-      console.groupEnd();
-
-      // ============================================================
-      // SELECT ENTITY
-      // ============================================================
-
       EditorSelection.selectEntity(selectedEntity);
     }
-
-    // ================================================================
-    // WINDOW POINTER LISTENER
-    // ================================================================
 
     window.addEventListener("pointerdown", onPointerDown);
 
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [camera, scene]);
+  }, [camera, scene, gl.domElement]);
 
   return null;
 }
@@ -4129,30 +6813,61 @@ import useEngineStore from "../../../store/engineStore";
 
 import { EventBus, EngineEvents } from "../../events";
 
+import GizmoController from "../gizmos/GizmoController";
+
 function selectEntity(entity) {
+  /*
+   * A transform operation owns the current selection.
+   *
+   * This protects:
+   *
+   * - viewport selection
+   * - hierarchy selection
+   * - inspector-driven selection
+   */
+  if (GizmoController.isTransforming()) {
+    return false;
+  }
+
   const selected = useEngineStore.getState().editor.selectedEntity;
 
-  if (selected === entity) return;
+  if (selected === entity) {
+    return true;
+  }
 
   useEngineStore.getState().setSelectedEntity(entity);
 
   EventBus.emit(EngineEvents.ENTITY_SELECTED, entity);
+
+  return true;
 }
 
 function clearSelection() {
+  if (GizmoController.isTransforming()) {
+    return false;
+  }
+
   useEngineStore.getState().clearSelection();
 
   EventBus.emit(EngineEvents.ENTITY_DESELECTED);
+
+  return true;
 }
 
 function toggleSelection(entity) {
+  if (GizmoController.isTransforming()) {
+    return false;
+  }
+
   if (isSelected(entity)) {
     clearSelection();
 
-    return;
+    return true;
   }
 
   selectEntity(entity);
+
+  return true;
 }
 
 function getSelectedEntity() {
@@ -4165,13 +6880,9 @@ function isSelected(entity) {
 
 export default {
   selectEntity,
-
   clearSelection,
-
   toggleSelection,
-
   getSelectedEntity,
-
   isSelected,
 };
 
@@ -4190,11 +6901,123 @@ export { default as EditorSelection } from "./EditorSelection";
 FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\shortcuts\EditorShortcuts.js
 ==============================
 
-export default function EditorShortcuts() {
+import { useEffect } from "react";
 
-    return null;
+import GizmoController from "../gizmos/GizmoController";
 
+import GizmoDragController from "../gizmos/interaction/GizmoDragController";
+import GizmoRotateController from "../gizmos/interaction/GizmoRotateController";
+import GizmoScaleController from "../gizmos/interaction/GizmoScaleController";
+
+import { GIZMO_MODES } from "../gizmos/shared/GizmoConstants";
+
+function cancelActiveTransform() {
+  if (GizmoDragController.isDragging()) {
+    GizmoDragController.cancel();
+    return true;
+  }
+
+  if (GizmoRotateController.isRotating()) {
+    GizmoRotateController.cancel();
+    return true;
+  }
+
+  if (GizmoScaleController.isScaling()) {
+    GizmoScaleController.cancel();
+    return true;
+  }
+
+  return false;
 }
+
+export default function EditorShortcuts() {
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target;
+
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (event.code === "Escape") {
+        if (GizmoController.isTransforming()) {
+          event.preventDefault();
+          cancelActiveTransform();
+        }
+
+        return;
+      }
+
+      // Transform tools own Q / E / R while dragging.
+      if (GizmoController.isTransforming()) {
+        if (
+          event.code === "KeyQ" ||
+          event.code === "KeyE" ||
+          event.code === "KeyR"
+        ) {
+          event.preventDefault();
+        }
+
+        return;
+      }
+
+      if (event.repeat) {
+        return;
+      }
+
+      // ----------------------------------------------------------
+      // MOVE
+      // ----------------------------------------------------------
+
+      if (event.code === "KeyQ") {
+        event.preventDefault();
+
+        GizmoController.setMode(GIZMO_MODES.MOVE);
+
+        return;
+      }
+
+      // ----------------------------------------------------------
+      // ROTATE
+      // ----------------------------------------------------------
+
+      if (event.code === "KeyE") {
+        event.preventDefault();
+
+        GizmoController.setMode(GIZMO_MODES.ROTATE);
+
+        return;
+      }
+
+      // ----------------------------------------------------------
+      // SCALE
+      // ----------------------------------------------------------
+
+      if (event.code === "KeyR") {
+        event.preventDefault();
+
+        GizmoController.setMode(GIZMO_MODES.SCALE);
+
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  return null;
+}
+
 
 
 ==============================
@@ -4236,13 +7059,23 @@ class EditorTransform {
   // ============================================================
 
   translate(delta) {
-    if (!this.entity || !delta) return;
+    if (!this.entity || !delta) {
+      return false;
+    }
 
     this.entity.transform.translate(delta.x, delta.y, delta.z);
+
+    return true;
   }
 
   translateAxis(axis, amount) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(amount)) {
+      return false;
+    }
 
     const position = this.entity.transform.position.clone();
 
@@ -4260,16 +7093,26 @@ class EditorTransform {
         break;
 
       default:
-        return;
+        return false;
     }
 
     this.entity.transform.setPosition(position.x, position.y, position.z);
+
+    return true;
   }
 
   setPosition(x, y, z) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     this.entity.transform.setPosition(x, y, z);
+
+    return true;
   }
 
   // ============================================================
@@ -4278,27 +7121,20 @@ class EditorTransform {
 
   setEntityPosition(entity, x, y, z) {
     if (!entity) {
-      console.warn("[EditorTransform] setEntityPosition: missing entity");
-
-      return;
+      return false;
     }
 
     if (!entity.transform) {
-      console.warn(
-        "[EditorTransform] setEntityPosition: missing transform",
-        entity,
-      );
-
-      return;
+      return false;
     }
 
-    console.log("[EditorTransform] Position update", {
-      entity: entity.name,
-      from: entity.transform.position.clone(),
-      to: { x, y, z },
-    });
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     entity.transform.setPosition(x, y, z);
+
+    return true;
   }
 
   // ============================================================
@@ -4306,15 +7142,35 @@ class EditorTransform {
   // ============================================================
 
   setRotation(x, y, z) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     this.entity.transform.setRotation(x, y, z);
+
+    return true;
   }
 
   rotate(delta) {
-    if (!this.entity || !delta) return;
+    if (!this.entity || !delta) {
+      return false;
+    }
+
+    if (
+      !Number.isFinite(delta.x) ||
+      !Number.isFinite(delta.y) ||
+      !Number.isFinite(delta.z)
+    ) {
+      return false;
+    }
 
     this.entity.transform.rotate(delta.x, delta.y, delta.z);
+
+    return true;
   }
 
   // ============================================================
@@ -4322,11 +7178,21 @@ class EditorTransform {
   // ============================================================
 
   setEntityRotation(entity, x, y, z) {
-    if (!entity) return;
+    if (!entity) {
+      return false;
+    }
 
-    if (!entity.transform) return;
+    if (!entity.transform) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     entity.transform.setRotation(x, y, z);
+
+    return true;
   }
 
   // ============================================================
@@ -4334,15 +7200,35 @@ class EditorTransform {
   // ============================================================
 
   setScale(x, y, z) {
-    if (!this.entity) return;
+    if (!this.entity) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     this.entity.transform.setScale(x, y, z);
+
+    return true;
   }
 
   scaleBy(delta) {
-    if (!this.entity || !delta) return;
+    if (!this.entity || !delta) {
+      return false;
+    }
+
+    if (
+      !Number.isFinite(delta.x) ||
+      !Number.isFinite(delta.y) ||
+      !Number.isFinite(delta.z)
+    ) {
+      return false;
+    }
 
     this.entity.transform.scaleBy(delta.x, delta.y, delta.z);
+
+    return true;
   }
 
   // ============================================================
@@ -4350,11 +7236,21 @@ class EditorTransform {
   // ============================================================
 
   setEntityScale(entity, x, y, z) {
-    if (!entity) return;
+    if (!entity) {
+      return false;
+    }
 
-    if (!entity.transform) return;
+    if (!entity.transform) {
+      return false;
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      return false;
+    }
 
     entity.transform.setScale(x, y, z);
+
+    return true;
   }
 }
 
@@ -4367,6 +7263,267 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\transform\in
 ==============================
 
 export { default as EditorTransform } from "./EditorTransform";
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\view\ViewGizmo.jsx
+==============================
+
+import { Html } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
+import * as THREE from "three";
+
+import useEngineStore from "../../../store/engineStore";
+
+export default function ViewGizmo() {
+  const { camera, set, size } = useThree();
+
+  const getTarget = () => {
+    const selected = useEngineStore.getState().editor.selectedEntity;
+
+    if (selected?.transform?.position) {
+      return selected.transform.position.clone();
+    }
+
+    return new THREE.Vector3(0, 0, 0);
+  };
+
+  const snapView = (direction, up) => {
+    const target = getTarget();
+
+    const currentDistance = camera.position.distanceTo(target);
+
+    const distance = Math.max(currentDistance, 8);
+
+    const position = target
+      .clone()
+      .add(direction.clone().normalize().multiplyScalar(distance));
+
+    camera.position.copy(position);
+
+    camera.up.copy(up);
+
+    camera.lookAt(target);
+
+    camera.updateProjectionMatrix();
+  };
+
+  const toggleProjection = () => {
+    const target = getTarget();
+
+    const position = camera.position.clone();
+
+    const quaternion = camera.quaternion.clone();
+
+    const up = camera.up.clone();
+
+    const distance = camera.position.distanceTo(target);
+
+    // ==========================================================
+    // Perspective -> Orthographic
+    // ==========================================================
+
+    if (camera.isPerspectiveCamera) {
+      const aspect = size.width / Math.max(size.height, 1);
+
+      const halfHeight = Math.max(distance * 0.35, 4);
+
+      const halfWidth = halfHeight * aspect;
+
+      const nextCamera = new THREE.OrthographicCamera(
+        -halfWidth,
+        halfWidth,
+        halfHeight,
+        -halfHeight,
+        0.1,
+        2000,
+      );
+
+      nextCamera.position.copy(position);
+
+      nextCamera.quaternion.copy(quaternion);
+
+      nextCamera.up.copy(up);
+
+      nextCamera.zoom = 1;
+
+      nextCamera.lookAt(target);
+
+      nextCamera.updateProjectionMatrix();
+
+      set({
+        camera: nextCamera,
+      });
+
+      return;
+    }
+
+    // ==========================================================
+    // Orthographic -> Perspective
+    // ==========================================================
+
+    const nextCamera = new THREE.PerspectiveCamera(
+      60,
+      size.width / Math.max(size.height, 1),
+      0.1,
+      2000,
+    );
+
+    nextCamera.position.copy(position);
+
+    nextCamera.quaternion.copy(quaternion);
+
+    nextCamera.up.copy(up);
+
+    nextCamera.lookAt(target);
+
+    nextCamera.updateProjectionMatrix();
+
+    set({
+      camera: nextCamera,
+    });
+  };
+
+  const buttonStyle = {
+    width: 34,
+    height: 28,
+
+    border: "1px solid rgba(255,255,255,0.2)",
+
+    background: "rgba(25,25,25,0.82)",
+
+    color: "#ffffff",
+
+    borderRadius: 4,
+
+    cursor: "pointer",
+
+    fontSize: 11,
+
+    fontWeight: 600,
+
+    display: "flex",
+
+    alignItems: "center",
+
+    justifyContent: "center",
+  };
+
+  const axisButton = (label, direction, up) => (
+    <button
+      type="button"
+      style={buttonStyle}
+      onClick={(event) => {
+        event.stopPropagation();
+
+        snapView(direction, up);
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <Html fullscreen zIndexRange={[1000, 0]}>
+      <div
+        style={{
+          position: "absolute",
+
+          top: 14,
+          right: 14,
+
+          display: "flex",
+          flexDirection: "column",
+
+          alignItems: "center",
+
+          gap: 6,
+
+          pointerEvents: "auto",
+
+          userSelect: "none",
+        }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+          }}
+        >
+          {axisButton(
+            "TOP",
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(0, 0, -1),
+          )}
+
+          {axisButton(
+            "BOTTOM",
+            new THREE.Vector3(0, -1, 0),
+            new THREE.Vector3(0, 0, 1),
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+          }}
+        >
+          {axisButton(
+            "FRONT",
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(0, 1, 0),
+          )}
+
+          {axisButton(
+            "BACK",
+            new THREE.Vector3(0, 0, -1),
+            new THREE.Vector3(0, 1, 0),
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+          }}
+        >
+          {axisButton(
+            "LEFT",
+            new THREE.Vector3(-1, 0, 0),
+            new THREE.Vector3(0, 1, 0),
+          )}
+
+          {axisButton(
+            "RIGHT",
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(0, 1, 0),
+          )}
+        </div>
+
+        <button
+          type="button"
+          style={{
+            ...buttonStyle,
+
+            width: 74,
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+
+            toggleProjection();
+          }}
+        >
+          {camera.isOrthographicCamera ? "ORTHO" : "PERSP"}
+        </button>
+      </div>
+    </Html>
+  );
+}
+
 
 
 ==============================
@@ -4389,6 +7546,8 @@ import PhysicsRenderer from "./PhysicsRenderer";
 
 import { GizmoManager } from "../gizmos";
 
+import ViewGizmo from "../view/ViewGizmo";
+
 export default function EditorVisualManager() {
   return (
     <>
@@ -4399,6 +7558,8 @@ export default function EditorVisualManager() {
       <PhysicsRenderer />
 
       <GizmoManager />
+
+      <ViewGizmo />
     </>
   );
 }
@@ -4587,6 +7748,236 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\Phys
 
 export default function PhysicsRenderer() {
   return null;
+}
+
+
+
+==============================
+FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\editor\visuals\TransformPositionGuide.jsx
+==============================
+
+import * as THREE from "three";
+import { useMemo } from "react";
+import { Html } from "@react-three/drei";
+
+const AXIS_LENGTH = 1.5;
+const AXIS_RADIUS = 0.018;
+const ORIGIN_RADIUS = 0.06;
+
+const COLORS = {
+  x: "#ff4d4d",
+  y: "#4dff88",
+  z: "#4d8dff",
+  origin: "#ffffff",
+  guide: "#ffffff",
+};
+
+function AxisLine({ direction, color, length = AXIS_LENGTH }) {
+  const quaternion = useMemo(() => {
+    const q = new THREE.Quaternion();
+
+    const up = new THREE.Vector3(0, 1, 0);
+    const target = new THREE.Vector3(...direction).normalize();
+
+    q.setFromUnitVectors(up, target);
+
+    return q;
+  }, [direction]);
+
+  return (
+    <mesh
+      position={[
+        direction[0] * length * 0.5,
+        direction[1] * length * 0.5,
+        direction[2] * length * 0.5,
+      ]}
+      quaternion={quaternion}
+      raycast={() => null}
+      userData={{
+        editorVisual: true,
+        transformPositionGuide: true,
+      }}
+    >
+      <cylinderGeometry args={[AXIS_RADIUS, AXIS_RADIUS, length, 8]} />
+
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.9}
+        depthTest={false}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
+function AxisLabel({ axis, color, position }) {
+  return (
+    <Html
+      position={position}
+      center
+      distanceFactor={8}
+      style={{
+        pointerEvents: "none",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        color,
+        fontFamily:
+          "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+        fontSize: "11px",
+        fontWeight: 700,
+        letterSpacing: "0.04em",
+        textShadow: "0 1px 2px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.8)",
+      }}
+    >
+      {axis}
+    </Html>
+  );
+}
+
+function PositionLabel({ position }) {
+  const [x, y, z] = position;
+
+  return (
+    <Html
+      position={[0, 0.25, 0]}
+      center
+      distanceFactor={8}
+      style={{
+        pointerEvents: "none",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        padding: "6px 8px",
+        borderRadius: "5px",
+        background: "rgba(15, 15, 18, 0.88)",
+        border: "1px solid rgba(255,255,255,0.14)",
+        boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
+        color: "#ffffff",
+        fontFamily:
+          "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+        fontSize: "11px",
+        lineHeight: 1.35,
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 3 }}>Position</div>
+
+      <div>
+        <span style={{ color: COLORS.x }}>X</span> {formatValue(x)}
+      </div>
+
+      <div>
+        <span style={{ color: COLORS.y }}>Y</span> {formatValue(y)}
+      </div>
+
+      <div>
+        <span style={{ color: COLORS.z }}>Z</span> {formatValue(z)}
+      </div>
+    </Html>
+  );
+}
+
+function formatValue(value) {
+  if (!Number.isFinite(value)) {
+    return "0.00";
+  }
+
+  return Number(value).toFixed(2);
+}
+
+export default function TransformPositionGuide({
+  position = [0, 0, 0],
+  visible = true,
+  showLabels = true,
+  showPosition = true,
+  size = 1,
+}) {
+  if (!visible) {
+    return null;
+  }
+
+  const axisLength = AXIS_LENGTH * size;
+
+  return (
+    <group
+      position={position}
+      userData={{
+        editorVisual: true,
+        transformPositionGuide: true,
+      }}
+    >
+      {/* ====================================================== */}
+      {/* ORIGIN                                                 */}
+      {/* ====================================================== */}
+
+      <mesh
+        raycast={() => null}
+        userData={{
+          editorVisual: true,
+          transformPositionGuide: true,
+        }}
+      >
+        <sphereGeometry args={[ORIGIN_RADIUS * size, 12, 12]} />
+
+        <meshBasicMaterial
+          color={COLORS.origin}
+          transparent
+          opacity={0.95}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* ====================================================== */}
+      {/* X AXIS                                                 */}
+      {/* ====================================================== */}
+
+      <AxisLine direction={[1, 0, 0]} color={COLORS.x} length={axisLength} />
+
+      {/* ====================================================== */}
+      {/* Y AXIS                                                 */}
+      {/* ====================================================== */}
+
+      <AxisLine direction={[0, 1, 0]} color={COLORS.y} length={axisLength} />
+
+      {/* ====================================================== */}
+      {/* Z AXIS                                                 */}
+      {/* ====================================================== */}
+
+      <AxisLine direction={[0, 0, 1]} color={COLORS.z} length={axisLength} />
+
+      {/* ====================================================== */}
+      {/* AXIS LABELS                                             */}
+      {/* ====================================================== */}
+
+      {showLabels && (
+        <>
+          <AxisLabel
+            axis="X"
+            color={COLORS.x}
+            position={[axisLength + 0.12, 0, 0]}
+          />
+
+          <AxisLabel
+            axis="Y"
+            color={COLORS.y}
+            position={[0, axisLength + 0.12, 0]}
+          />
+
+          <AxisLabel
+            axis="Z"
+            color={COLORS.z}
+            position={[0, 0, axisLength + 0.12]}
+          />
+        </>
+      )}
+
+      {/* ====================================================== */}
+      {/* NUMERIC POSITION                                       */}
+      {/* ====================================================== */}
+
+      {showPosition && <PositionLabel position={position} />}
+    </group>
+  );
 }
 
 
@@ -5292,6 +8683,8 @@ export default class SceneGraph {
   add(entity) {
     if (!entity) return;
 
+    if (entity.parent) return;
+
     // Do not use root.add().
     //
     // The root is only the SceneGraph container.
@@ -5323,7 +8716,15 @@ export default class SceneGraph {
   //--------------------------------------------------
 
   traverse(callback) {
+    const visited = new Set();
+
     const walk = (node) => {
+      if (visited.has(node)) {
+        return;
+      }
+
+      visited.add(node);
+
       callback(node);
 
       node.children.forEach(walk);
@@ -5658,6 +9059,11 @@ export default function Ground({ position = [0, 0, 0] } = {}) {
     }
 
     object.receiveShadow = true;
+
+    // Ground is an ordinary editor entity.  Keep it available to the
+    // editor raycaster so a click on the ground selects this entity rather
+    // than being treated as empty-space deselection.
+    object.userData.ignoreRaycast = false;
 
     // --------------------------------------------------
     // Position
@@ -7045,9 +10451,8 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\engine\scene\SceneManager.
 ==============================
 
 import WorldManager from "../world/WorldManager";
-import { DebugWorld, DebugEntity } from "../debug";
-import { PerformanceManager } from "../performance";
-import { InputManager, PointerLock } from "../input";
+import { DebugWorld } from "../debug";
+import { InputManager } from "../input";
 import { EditorScene } from "../editor";
 import SceneInitializer from "./SceneInitializer";
 
@@ -7063,8 +10468,6 @@ export default function SceneManager() {
       <EditorScene />
 
       <DebugWorld />
-
-      {/* <PointerLock /> */}
     </>
   );
 }
@@ -7247,13 +10650,14 @@ export default class System {
 
     start() {}
 
-    update(delta) {}
+    update() {}
 
-    lateUpdate(delta) {}
+    lateUpdate() {}
 
-    fixedUpdate(delta) {}
+    fixedUpdate() {}
 
 }
+
 
 
 ==============================
@@ -7500,6 +10904,10 @@ class World {
   destroy() {
     console.log("[World] Destroying...");
 
+    EntityManager.getAll().forEach((entity) => {
+      this.despawn(entity);
+    });
+
     SystemManager.destroy();
 
     EntityManager.clear();
@@ -7543,11 +10951,13 @@ class World {
 
     EntityManager.add(entity);
 
-    this.sceneGraph.add(entity);
+    if (!entity.parent) {
+      this.sceneGraph.add(entity);
+    }
 
     const object = entity.getObject();
 
-    if (object) {
+    if (object && !entity.parent) {
       SceneService.add(object);
     }
 
@@ -7560,14 +10970,25 @@ class World {
 
   despawn(entity) {
     if (!entity) {
-      return;
+      return false;
+    }
+
+    if (!EntityManager.getByUUID(entity.uuid)) {
+      return false;
     }
 
     console.log("[World] Despawning:", entity.name);
 
     const object = entity.getObject();
 
-    if (object) {
+    if (useEngineStore.getState().editor.selectedEntity === entity) {
+      useEngineStore.getState().clearSelection();
+      EventBus.emit(EngineEvents.ENTITY_DESELECTED);
+    }
+
+    if (entity.parent) {
+      entity.parent.remove(entity);
+    } else if (object) {
       SceneService.remove(object);
     }
 
@@ -7580,6 +11001,8 @@ class World {
     useEngineStore.getState().removeEntity(entity);
 
     EventBus.emit(EngineEvents.ENTITY_DESTROYED, entity);
+
+    return true;
   }
 
   // --------------------------------------------------
@@ -7871,191 +11294,166 @@ FILE: C:\Users\Neo\Downloads\Programs\nova-engine\src\store\engineStore.js
 ==============================
 
 import { create } from "zustand";
+
 import CameraModes from "../engine/camera/CameraModes";
+import { GIZMO_MODES } from "../engine/editor/gizmos/shared/GizmoConstants";
 
 const useEngineStore = create((set) => ({
+  // ============================================================
+  // KEYBOARD
+  // ============================================================
 
-    //-----------------------------------
-    // Keyboard
-    //-----------------------------------
+  keyboard: {},
 
-    keyboard: {},
+  setKeyboard: (keyboard) =>
+    set({
+      keyboard,
+    }),
 
-    setKeyboard: (keyboard) =>
-        set({ keyboard }),
+  // ============================================================
+  // MOUSE
+  // ============================================================
 
-    //-----------------------------------
-    // Mouse
-    //-----------------------------------
+  mouse: {
+    x: 0,
+    y: 0,
 
-    mouse: {
+    deltaX: 0,
+    deltaY: 0,
 
-        x: 0,
-        y: 0,
+    left: false,
+    middle: false,
+    right: false,
 
+    wheel: 0,
+
+    locked: false,
+  },
+
+  setMouse: (mouse) =>
+    set({
+      mouse,
+    }),
+
+  consumeMouseMotion: () =>
+    set((state) => ({
+      mouse: {
+        ...state.mouse,
         deltaX: 0,
         deltaY: 0,
-
-        left: false,
-        middle: false,
-        right: false,
-
         wheel: 0,
+      },
+    })),
 
-        locked: false,
+  // ============================================================
+  // PERFORMANCE
+  // ============================================================
 
-    },
+  fps: 0,
 
-    setMouse: (mouse) =>
-        set({ mouse }),
+  setFPS: (fps) =>
+    set({
+      fps,
+    }),
 
-    consumeMouseMotion: () =>
-        set((state) => ({
-            mouse: {
-                ...state.mouse,
-                deltaX: 0,
-                deltaY: 0,
-                wheel: 0,
-            },
-        })),
+  // ============================================================
+  // GRAPHICS
+  // ============================================================
 
-    //-----------------------------------
-    // Performance
-    //-----------------------------------
+  quality: "High",
 
-    fps: 0,
+  setQuality: (quality) =>
+    set({
+      quality,
+    }),
 
-    setFPS: (fps) =>
-        set({ fps }),
+  // ============================================================
+  // EDITOR
+  // ============================================================
 
-    //-----------------------------------
-    // Graphics
-    //-----------------------------------
+  editor: {
+    enabled: true,
 
-    quality: "High",
+    mode: CameraModes.EDITOR,
 
-    setQuality: (quality) =>
-        set({ quality }),
+    cameraSpeed: 0.15,
 
-    //-----------------------------------
-    // Editor
-    //-----------------------------------
+    mouseSensitivity: 0.002,
 
-    editor: {
+    showGrid: true,
 
-        enabled: true,
+    showAxes: true,
 
-        mode: CameraModes.EDITOR,
+    selectedEntity: null,
 
-        cameraSpeed: 0.15,
+    hoveredEntity: null,
 
-        mouseSensitivity: 0.002,
+    multiSelection: [],
 
-        showGrid: true,
+    // ----------------------------------------------------------
+    // Transform tool
+    // ----------------------------------------------------------
 
-        showAxes: true,
+    gizmoMode: GIZMO_MODES.MOVE,
+  },
+
+  setEditor: (editor) =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
+        ...editor,
+      },
+    })),
+
+  setSelectedEntity: (entity) =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
+        selectedEntity: entity,
+      },
+    })),
+
+  setHoveredEntity: (entity) =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
+        hoveredEntity: entity,
+      },
+    })),
+
+  clearSelection: () =>
+    set((state) => ({
+      editor: {
+        ...state.editor,
 
         selectedEntity: null,
 
         hoveredEntity: null,
 
-        multiSelection: []
+        multiSelection: [],
+      },
+    })),
 
-    },
+  // ============================================================
+  // ENTITIES
+  // ============================================================
 
-    setEditor: (editor) =>
-        set((state) => ({
+  entities: [],
 
-            editor: {
+  setEntities: (entities) =>
+    set({
+      entities,
+    }),
 
-                ...state.editor,
+  addEntity: (entity) =>
+    set((state) => ({
+      entities: [...state.entities, entity],
+    })),
 
-                ...editor
-
-            }
-
-        })),
-
-    setSelectedEntity: (entity) =>
-        set((state) => ({
-
-            editor: {
-
-                ...state.editor,
-
-                selectedEntity: entity
-
-            }
-
-        })),
-
-    setHoveredEntity: (entity) =>
-        set((state) => ({
-
-            editor: {
-
-                ...state.editor,
-
-                hoveredEntity: entity
-
-            }
-
-        })),
-
-    clearSelection: () =>
-        set((state) => ({
-
-            editor: {
-
-                ...state.editor,
-
-                selectedEntity: null,
-
-                hoveredEntity: null,
-
-                multiSelection: []
-
-            }
-
-        })),
-
-    //-----------------------------------
-    // Entities
-    //-----------------------------------
-
-    entities: [],
-
-    setEntities: (entities) =>
-        set({
-
-            entities
-
-        }),
-
-    addEntity: (entity) =>
-        set((state) => ({
-
-            entities: [
-
-                ...state.entities,
-
-                entity
-
-            ]
-
-        })),
-
-    removeEntity: (entity) =>
-        set((state) => ({
-
-            entities: state.entities.filter(
-
-                e => e !== entity
-
-            )
-
-        }))
-
+  removeEntity: (entity) =>
+    set((state) => ({
+      entities: state.entities.filter((e) => e !== entity),
+    })),
 }));
 
 export default useEngineStore;
