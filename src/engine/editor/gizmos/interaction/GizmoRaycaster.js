@@ -21,10 +21,11 @@ class GizmoRaycaster {
     this.ndc.set(pointer.x, pointer.y);
 
     /*
-     * Camera position/orientation may have changed since the
-     * previous render. Force the world matrix to be current
-     * before generating the ray.
+     * Always rebuild the camera world transform immediately before
+     * creating a gizmo ray. Gizmo interaction must use the same
+     * current camera state as editor selection.
      */
+    camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
 
     this.raycaster.setFromCamera(this.ndc, camera);
@@ -40,6 +41,27 @@ class GizmoRaycaster {
     return this.lastRay;
   }
 
+  getRayData() {
+    return {
+      ndc: {
+        x: Number(this.ndc.x.toFixed(6)),
+        y: Number(this.ndc.y.toFixed(6)),
+      },
+
+      origin: {
+        x: Number(this.lastRay.origin.x.toFixed(4)),
+        y: Number(this.lastRay.origin.y.toFixed(4)),
+        z: Number(this.lastRay.origin.z.toFixed(4)),
+      },
+
+      direction: {
+        x: Number(this.lastRay.direction.x.toFixed(6)),
+        y: Number(this.lastRay.direction.y.toFixed(6)),
+        z: Number(this.lastRay.direction.z.toFixed(6)),
+      },
+    };
+  }
+
   intersectPlane(camera, pointer, plane) {
     if (!camera || !pointer || !plane) {
       return null;
@@ -52,12 +74,12 @@ class GizmoRaycaster {
     }
 
     /*
-     * If the ray is almost parallel to the plane, the intersection
-     * becomes numerically unstable.
+     * Do not attempt an unstable intersection when the ray is
+     * effectively parallel to the drag plane.
      */
-    const denominator = Math.abs(plane.normal.dot(ray.direction));
+    const denominator = plane.normal.dot(ray.direction);
 
-    if (denominator < 0.0005) {
+    if (Math.abs(denominator) < 0.0005) {
       return null;
     }
 

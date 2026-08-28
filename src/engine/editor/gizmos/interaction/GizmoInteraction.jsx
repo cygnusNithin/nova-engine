@@ -9,10 +9,55 @@ import GizmoScaleController from "./GizmoScaleController";
 
 import GizmoState from "../GizmoState";
 
+const DEBUG_GIZMO_INTERACTION = true;
+
+function logFailedIntersection(type, camera, pointer, plane) {
+  if (!DEBUG_GIZMO_INTERACTION) {
+    return;
+  }
+
+  console.groupCollapsed(
+    `[NOVA GIZMO ${type}] Ray / plane intersection failed`,
+  );
+
+  console.log("Pointer NDC:", {
+    x: Number(pointer.x.toFixed(6)),
+    y: Number(pointer.y.toFixed(6)),
+  });
+
+  console.log("Camera position:", {
+    x: Number(camera.position.x.toFixed(4)),
+    y: Number(camera.position.y.toFixed(4)),
+    z: Number(camera.position.z.toFixed(4)),
+  });
+
+  console.log("Ray:", GizmoRaycaster.getRayData());
+
+  console.log("Plane normal:", {
+    x: Number(plane.normal.x.toFixed(6)),
+    y: Number(plane.normal.y.toFixed(6)),
+    z: Number(plane.normal.z.toFixed(6)),
+  });
+
+  console.log(
+    "Ray / plane alignment:",
+    Number(plane.normal.dot(GizmoRaycaster.getRay().direction).toFixed(6)),
+  );
+
+  console.groupEnd();
+}
+
 export default function GizmoInteraction() {
   const { camera, pointer } = useThree();
 
   useFrame(() => {
+    /*
+     * Make absolutely sure every gizmo operation starts from the
+     * latest camera transform.
+     */
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
     /*
      * ============================================================
      * ROTATE
@@ -38,6 +83,8 @@ export default function GizmoInteraction() {
       const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
 
       if (!point) {
+        logFailedIntersection("ROTATE", camera, pointer, plane);
+
         return;
       }
 
@@ -67,9 +114,6 @@ export default function GizmoInteraction() {
 
       const axis = GizmoScaleController.getAxis();
 
-      /*
-       * Scale owns the drag plane through GizmoState.
-       */
       const plane = GizmoState.dragPlane;
 
       if (!plane || !axis) {
@@ -79,6 +123,8 @@ export default function GizmoInteraction() {
       const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
 
       if (!point) {
+        logFailedIntersection("SCALE", camera, pointer, plane);
+
         return;
       }
 
@@ -111,6 +157,8 @@ export default function GizmoInteraction() {
     const point = GizmoRaycaster.intersectPlane(camera, pointer, plane);
 
     if (!point) {
+      logFailedIntersection("MOVE", camera, pointer, plane);
+
       return;
     }
 
