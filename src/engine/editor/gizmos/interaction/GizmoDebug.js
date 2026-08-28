@@ -1,6 +1,5 @@
 import * as THREE from "three";
 
-
 class GizmoDebug {
   constructor() {
     this.enabled = true;
@@ -57,10 +56,6 @@ class GizmoDebug {
 
     const hoverKey = `${mode}:${axis}:${source}`;
 
-    /*
-     * Don't spam DevTools if the pointer remains
-     * over the same gizmo object.
-     */
     if (
       this.lastHoverKey === hoverKey &&
       now - this.lastHoverTime < this.hoverLogInterval
@@ -69,18 +64,24 @@ class GizmoDebug {
     }
 
     this.lastHoverKey = hoverKey;
+
     this.lastHoverTime = now;
 
     const pointer = event?.pointer;
+
     const ray = event?.ray;
+
     const point = event?.point;
+
     const object = event?.object;
 
     console.groupCollapsed(`[GizmoDebug] HOVER ${mode} ${axis ?? "none"}`);
 
     console.log("Target", {
       mode,
+
       axis,
+
       source,
 
       object: object?.name ?? null,
@@ -114,24 +115,19 @@ class GizmoDebug {
       clientY: event?.nativeEvent?.clientY ?? null,
     });
 
-    this.logCameraAndEntity(camera ?? event?.camera, selectedEntity);
+    this.logCameraAndEntity(
+      camera ?? event?.camera,
+      selectedEntity,
+      pointer,
+      ray,
+      object,
+      point,
+    );
 
     console.log("Ray", {
-      origin: ray?.origin
-        ? {
-            x: Number(ray.origin.x.toFixed(4)),
-            y: Number(ray.origin.y.toFixed(4)),
-            z: Number(ray.origin.z.toFixed(4)),
-          }
-        : null,
+      origin: ray?.origin ? this.toVectorRecord(ray.origin) : null,
 
-      direction: ray?.direction
-        ? {
-            x: Number(ray.direction.x.toFixed(4)),
-            y: Number(ray.direction.y.toFixed(4)),
-            z: Number(ray.direction.z.toFixed(4)),
-          }
-        : null,
+      direction: ray?.direction ? this.toVectorRecord(ray.direction) : null,
     });
 
     console.log("Intersection", {
@@ -139,13 +135,7 @@ class GizmoDebug {
         ? Number(event.distance.toFixed(4))
         : null,
 
-      worldPoint: point
-        ? {
-            x: Number(point.x.toFixed(4)),
-            y: Number(point.y.toFixed(4)),
-            z: Number(point.z.toFixed(4)),
-          }
-        : null,
+      worldPoint: point ? this.toVectorRecord(point) : null,
     });
 
     console.groupEnd();
@@ -211,10 +201,18 @@ class GizmoDebug {
 
     console.log("Live ray", {
       origin: this.toVectorRecord(ray?.origin),
+
       direction: this.toVectorRecord(ray?.direction),
     });
 
-    this.logCameraAndEntity(camera ?? event?.camera, selectedEntity);
+    this.logCameraAndEntity(
+      camera ?? event?.camera,
+      selectedEntity,
+      event?.pointer,
+      ray ?? event?.ray,
+      object,
+      event?.point,
+    );
 
     console.groupEnd();
   }
@@ -246,7 +244,9 @@ class GizmoDebug {
 
     console.log({
       mode,
+
       axis,
+
       pointerId,
 
       entity: entity?.name ?? entity?.id ?? entity?.uuid ?? null,
@@ -281,7 +281,13 @@ class GizmoDebug {
     });
   }
 
-  observeCamera(camera, mode, transforming = false, pointer = null, entity = null) {
+  observeCamera(
+    camera,
+    mode,
+    transforming = false,
+    pointer = null,
+    entity = null,
+  ) {
     if (!this.enabled || !camera) {
       return;
     }
@@ -314,23 +320,29 @@ class GizmoDebug {
 
     console.log("[GizmoDebug] CAMERA CHANGE", {
       mode,
+
       transforming,
 
       position: {
         x: Number(camera.position.x.toFixed(3)),
+
         y: Number(camera.position.y.toFixed(3)),
+
         z: Number(camera.position.z.toFixed(3)),
       },
 
       rotation: {
         x: Number(camera.rotation.x.toFixed(3)),
+
         y: Number(camera.rotation.y.toFixed(3)),
+
         z: Number(camera.rotation.z.toFixed(3)),
       },
 
       pointer: pointer
         ? {
             ndcX: Number(pointer.x.toFixed(4)),
+
             ndcY: Number(pointer.y.toFixed(4)),
           }
         : null,
@@ -338,10 +350,139 @@ class GizmoDebug {
       selectedEntity: entity
         ? {
             name: entity.name ?? entity.id ?? entity.uuid ?? null,
+
             position: this.toVectorRecord(entity.transform?.position),
           }
         : null,
     });
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * CURSOR ↔ GIZMO COMPARISON
+   * ------------------------------------------------------------
+   */
+
+  logCameraAndEntity(
+    camera,
+    entity,
+    pointer = null,
+    ray = null,
+    gizmoObject = null,
+    intersectionPoint = null,
+  ) {
+    if (!camera) {
+      return;
+    }
+
+    camera.updateMatrixWorld(true);
+
+    const direction = new THREE.Vector3();
+
+    camera.getWorldDirection(direction);
+
+    console.groupCollapsed("[GizmoDebug] CAMERA / CURSOR / GIZMO");
+
+    console.log("Camera", {
+      position: this.toVectorRecord(camera.position),
+
+      direction: this.toVectorRecord(direction),
+    });
+
+    if (entity?.transform) {
+      const entityPosition = entity.transform.position.clone();
+
+      const entityNDC = entityPosition.clone().project(camera);
+
+      console.log("Selected entity", {
+        position: this.toVectorRecord(entityPosition),
+
+        ndc: this.toVectorRecord(entityNDC),
+      });
+    }
+
+    if (pointer) {
+      console.log("Cursor NDC", {
+        x: Number(pointer.x.toFixed(5)),
+
+        y: Number(pointer.y.toFixed(5)),
+      });
+    }
+
+    if (ray) {
+      console.log("Cursor ray", {
+        origin: this.toVectorRecord(ray.origin),
+
+        direction: this.toVectorRecord(ray.direction),
+      });
+    }
+
+    if (gizmoObject) {
+      gizmoObject.updateWorldMatrix(true, false);
+
+      const gizmoPosition = new THREE.Vector3();
+
+      const gizmoQuaternion = new THREE.Quaternion();
+
+      const gizmoScale = new THREE.Vector3();
+
+      gizmoObject.matrixWorld.decompose(
+        gizmoPosition,
+        gizmoQuaternion,
+        gizmoScale,
+      );
+
+      const gizmoNDC = gizmoPosition.clone().project(camera);
+
+      console.log("Gizmo object", {
+        name: gizmoObject.name,
+
+        axis: gizmoObject.userData?.gizmoAxis ?? null,
+
+        type: gizmoObject.userData?.gizmoType ?? null,
+
+        worldPosition: this.toVectorRecord(gizmoPosition),
+
+        worldScale: this.toVectorRecord(gizmoScale),
+
+        ndc: this.toVectorRecord(gizmoNDC),
+      });
+
+      if (pointer) {
+        const dx = gizmoNDC.x - pointer.x;
+
+        const dy = gizmoNDC.y - pointer.y;
+
+        console.log("Cursor → gizmo screen-space error", {
+          dx: Number(dx.toFixed(5)),
+
+          dy: Number(dy.toFixed(5)),
+
+          distance: Number(Math.sqrt(dx * dx + dy * dy).toFixed(5)),
+        });
+      }
+
+      if (ray) {
+        const closest = ray.closestPointToPoint(
+          gizmoPosition,
+          new THREE.Vector3(),
+        );
+
+        console.log(
+          "Cursor ray → gizmo distance",
+          Number(closest.distanceTo(gizmoPosition).toFixed(5)),
+        );
+      }
+    }
+
+    if (intersectionPoint) {
+      console.log(
+        "Actual gizmo intersection",
+        this.toVectorRecord(intersectionPoint),
+      );
+    }
+
+    console.groupEnd();
   }
 
   toVectorRecord(vector) {
@@ -351,29 +492,11 @@ class GizmoDebug {
 
     return {
       x: Number(vector.x.toFixed(4)),
+
       y: Number(vector.y.toFixed(4)),
+
       z: Number(vector.z.toFixed(4)),
     };
-  }
-
-  logCameraAndEntity(camera, entity) {
-    if (!camera || !entity?.transform) {
-      return;
-    }
-
-    camera.updateMatrixWorld(true);
-
-    const direction = new THREE.Vector3();
-    const projectedOrigin = entity.transform.position.clone().project(camera);
-
-    camera.getWorldDirection(direction);
-
-    console.log("Camera/entity alignment", {
-      cameraPosition: this.toVectorRecord(camera.position),
-      cameraDirection: this.toVectorRecord(direction),
-      entityPosition: this.toVectorRecord(entity.transform.position),
-      entityOriginNdc: this.toVectorRecord(projectedOrigin),
-    });
   }
 }
 

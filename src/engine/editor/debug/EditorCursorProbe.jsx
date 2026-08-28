@@ -2,6 +2,31 @@ import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
+const DEBUG_CURSOR = true;
+const DEBUG_GIZMO_COMPARISON = true;
+
+const WORLD_GROUND_Y = 0;
+
+function vectorRecord(vector, precision = 4) {
+  if (!vector) {
+    return null;
+  }
+
+  return {
+    x: Number(vector.x.toFixed(precision)),
+    y: Number(vector.y.toFixed(precision)),
+    z: Number(vector.z.toFixed(precision)),
+  };
+}
+
+function number(value, precision = 4) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return Number(value.toFixed(precision));
+}
+
 export default function EditorCursorProbe() {
   const { camera, gl, scene } = useThree();
 
@@ -10,6 +35,34 @@ export default function EditorCursorProbe() {
 
   const lastCameraPosition = useRef(new THREE.Vector3());
   const lastCameraQuaternion = useRef(new THREE.Quaternion());
+
+  /*
+   * Reusable temporary objects.
+   *
+   * These avoid allocating unnecessary Three.js objects
+   * on every pointer movement.
+   */
+  const temp = useRef({
+    groundPlane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -WORLD_GROUND_Y),
+
+    groundPoint: new THREE.Vector3(),
+
+    objectPosition: new THREE.Vector3(),
+
+    objectQuaternion: new THREE.Quaternion(),
+
+    objectScale: new THREE.Vector3(),
+
+    projected: new THREE.Vector3(),
+
+    axisDirection: new THREE.Vector3(0, 1, 0),
+
+    axisEnd: new THREE.Vector3(),
+
+    closestPointOnRay: new THREE.Vector3(),
+
+    closestPointOnAxis: new THREE.Vector3(),
+  });
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -59,24 +112,110 @@ export default function EditorCursorProbe() {
       return false;
     }
 
-    function getGizmoWorldData(object) {
+    function findGizmoRoot(object) {
+      let current = object;
+
+      while (current) {
+        if (
+          current.userData?.gizmoMode ||
+          current.name === "MoveGizmo" ||
+          current.name === "RotateGizmo" ||
+          current.name === "ScaleGizmo"
+        ) {
+          return current;
+        }
+
+        current = current.parent;
+      }
+
+      return null;
+    }
+
+    function getWorldTransform(object) {
       object.updateWorldMatrix(true, false);
 
-      const position = new THREE.Vector3();
-      const quaternion = new THREE.Quaternion();
-      const scale = new THREE.Vector3();
+      const { objectPosition, objectQuaternion, objectScale } = temp.current;
 
-      object.matrixWorld.decompose(position, quaternion, scale);
+      object.matrixWorld.decompose(
+        objectPosition,
+        objectQuaternion,
+        objectScale,
+      );
 
       return {
-        position,
-        quaternion,
-        scale,
+        position: objectPosition.clone(),
+        quaternion: objectQuaternion.clone(),
+        scale: objectScale.clone(),
       };
     }
 
+    function projectWorldPosition(worldPosition) {
+      temp.current.projected.copy(worldPosition);
+      temp.current.projected.project(camera);
+
+      return temp.current.projected.clone();
+    }
+
+    function calculateGroundIntersection() {
+      const hit = raycaster.current.ray.intersectPlane(
+        temp.current.groundPlane,
+        temp.current.groundPoint,
+      );
+
+      if (!hit) {
+        return null;
+      }
+
+      return temp.current.groundPoint.clone();
+    }
+
+    function calculateCursorToNDCDistance(worldPosition) {
+      const projected = projectWorldPosition(worldPosition);
+
+      const dx = projected.x - pointer.current.x;
+      const dy = projected.y - pointer.current.y;
+
+      return {
+        ndc: vectorRecord(projected),
+
+        distance: number(Math.sqrt(dx * dx + dy * dy), 5),
+
+        dx: number(dx, 5),
+
+        dy: number(dy, 5),
+      };
+    }
+
+    /*
+     * Calculates the shortest distance between the cursor ray
+     * and a point in world space.
+     *
+     * This is extremely useful for gizmo debugging.
+     *
+     * If the cursor visually appears to be over an axis but
+     * this number is large, the ray is not actually aligned
+     * with that axis.
+     */
+    function distanceFromRayToPoint(point) {
+      const ray = raycaster.current.ray;
+
+      const closestPoint = ray.closestPointToPoint(
+        point,
+        temp.current.closestPointOnRay,
+      );
+
+      if (!closestPoint) {
+        return null;
+      }
+
+      return number(closestPoint.distanceTo(point), 5);
+    }
+
+    /*
+     * Camera diagnostic.
+     */
     function logCameraChanged() {
-      camera.updateMatrixWorld();
+      camera.updateMatrixWorld(true);
 
       const positionChanged = !lastCameraPosition.current.equals(
         camera.position,
@@ -98,13 +237,6 @@ export default function EditorCursorProbe() {
 
       console.log("quaternion:", camera.quaternion.clone());
 
-      console.log("matrixWorldNeedsUpdate:", camera.matrixWorldNeedsUpdate);
-
-      console.log(
-        "projectionMatrixNeedsUpdate:",
-        camera.projectionMatrixNeedsUpdate,
-      );
-
       console.log("matrixWorld:", camera.matrixWorld.clone());
 
       console.log("projectionMatrix:", camera.projectionMatrix.clone());
@@ -112,9 +244,13 @@ export default function EditorCursorProbe() {
       console.groupEnd();
 
       lastCameraPosition.current.copy(camera.position);
+
       lastCameraQuaternion.current.copy(camera.quaternion);
     }
 
+    /*
+     * Main cursor diagnostic.
+     */
     function onPointerMove(event) {
       const result = getCanvasPointer(event);
 
@@ -133,9 +269,10 @@ export default function EditorCursorProbe() {
       /*
        * IMPORTANT:
        *
-       * The camera must be up-to-date BEFORE setFromCamera().
+       * Camera must be completely current before
+       * creating the ray.
        */
-      camera.updateMatrixWorld();
+      camera.updateMatrixWorld(true);
 
       if (camera.isPerspectiveCamera) {
         camera.updateProjectionMatrix();
@@ -143,48 +280,57 @@ export default function EditorCursorProbe() {
 
       raycaster.current.setFromCamera(pointer.current, camera);
 
-      console.groupCollapsed("[EDITOR_POINTER]");
+      /*
+       * ---------------------------------------------------------
+       * WORLD CURSOR POSITION
+       * ---------------------------------------------------------
+       */
 
-      console.log("screen:", {
-        x: event.clientX,
-        y: event.clientY,
-      });
+      const groundPoint = calculateGroundIntersection();
 
-      console.log("canvasRect:", {
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height,
-      });
+      if (DEBUG_CURSOR) {
+        console.groupCollapsed("[NOVA CURSOR] Pointer State");
 
-      console.log("normalizedPointer:", {
-        x,
-        y,
-      });
+        console.log("Screen:", {
+          x: event.clientX,
+          y: event.clientY,
+        });
 
-      console.log("camera.position:", camera.position.clone());
+        console.log("Canvas:", {
+          left: number(rect.left, 2),
+          top: number(rect.top, 2),
+          width: number(rect.width, 2),
+          height: number(rect.height, 2),
+        });
 
-      console.log("camera.rotation:", camera.rotation.clone());
+        console.log("NDC:", {
+          x: number(x, 5),
+          y: number(y, 5),
+        });
 
-      console.log("camera.quaternion:", camera.quaternion.clone());
+        console.log("Camera position:", vectorRecord(camera.position));
 
-      console.log("camera.matrixWorld:", camera.matrixWorld.clone());
+        console.log("Camera rotation:", vectorRecord(camera.rotation));
 
-      console.log("camera.projectionMatrix:", camera.projectionMatrix.clone());
+        console.log("Ray origin:", vectorRecord(raycaster.current.ray.origin));
 
-      console.log("ray.origin:", raycaster.current.ray.origin.clone());
+        console.log(
+          "Ray direction:",
+          vectorRecord(raycaster.current.ray.direction),
+        );
 
-      console.log("ray.direction:", raycaster.current.ray.direction.clone());
+        console.log(
+          "World position @ Y=0:",
+          groundPoint ? vectorRecord(groundPoint) : null,
+        );
 
-      console.groupEnd();
+        console.groupEnd();
+      }
 
       /*
        * ---------------------------------------------------------
-       * Gizmo intersection diagnostic
+       * SCENE RAYCAST
        * ---------------------------------------------------------
-       *
-       * We intentionally inspect ALL meshes here.
-       * This does not modify selection.
        */
 
       const meshes = [];
@@ -203,11 +349,205 @@ export default function EditorCursorProbe() {
 
       const intersections = raycaster.current.intersectObjects(meshes, true);
 
-      const gizmoHit = intersections.find((hit) => isGizmoObject(hit.object));
+      /*
+       * ---------------------------------------------------------
+       * GIZMO DATA
+       * ---------------------------------------------------------
+       */
+
+      const gizmoHits = intersections.filter((hit) =>
+        isGizmoObject(hit.object),
+      );
+
+      const gizmoRoots = [];
+
+      scene.traverse((object) => {
+        if (!object.userData?.gizmo) {
+          return;
+        }
+
+        if (object.userData?.gizmoMode && !gizmoRoots.includes(object)) {
+          gizmoRoots.push(object);
+        }
+
+        if (
+          object.name === "MoveGizmo" ||
+          object.name === "RotateGizmo" ||
+          object.name === "ScaleGizmo"
+        ) {
+          if (!gizmoRoots.includes(object)) {
+            gizmoRoots.push(object);
+          }
+        }
+      });
+
+      /*
+       * ---------------------------------------------------------
+       * GIZMO COMPARISON
+       * ---------------------------------------------------------
+       */
+
+      if (DEBUG_GIZMO_COMPARISON && gizmoRoots.length > 0) {
+        console.groupCollapsed("[NOVA CURSOR ↔ GIZMO]");
+
+        console.log("Cursor NDC:", {
+          x: number(pointer.current.x, 5),
+          y: number(pointer.current.y, 5),
+        });
+
+        console.log(
+          "Cursor world @ Y=0:",
+          groundPoint ? vectorRecord(groundPoint) : null,
+        );
+
+        gizmoRoots.forEach((gizmoRoot) => {
+          const gizmoWorld = getWorldTransform(gizmoRoot);
+
+          const gizmoNDC = calculateCursorToNDCDistance(gizmoWorld.position);
+
+          console.groupCollapsed(
+            `Gizmo: ${
+              gizmoRoot.name || gizmoRoot.userData?.gizmoMode || "unknown"
+            }`,
+          );
+
+          console.log("World position:", {
+            x: number(gizmoWorld.position.x),
+            y: number(gizmoWorld.position.y),
+            z: number(gizmoWorld.position.z),
+          });
+
+          console.log("World rotation:", {
+            x: number(
+              new THREE.Euler().setFromQuaternion(gizmoWorld.quaternion).x,
+            ),
+
+            y: number(
+              new THREE.Euler().setFromQuaternion(gizmoWorld.quaternion).y,
+            ),
+
+            z: number(
+              new THREE.Euler().setFromQuaternion(gizmoWorld.quaternion).z,
+            ),
+          });
+
+          console.log("Screen/NDC comparison:", gizmoNDC);
+
+          console.log(
+            "Cursor ray → gizmo center distance:",
+            distanceFromRayToPoint(gizmoWorld.position),
+          );
+
+          /*
+           * Find all actual interactive gizmo handles.
+           */
+          const handles = [];
+
+          scene.traverse((object) => {
+            if (object.isMesh && object.userData?.gizmoHit) {
+              const root = findGizmoRoot(object);
+
+              if (root === gizmoRoot) {
+                handles.push(object);
+              }
+            }
+          });
+
+          handles.forEach((handle) => {
+            const handleWorld = getWorldTransform(handle);
+
+            const handleNDC = calculateCursorToNDCDistance(
+              handleWorld.position,
+            );
+
+            const axis =
+              handle.userData?.gizmoAxis ??
+              handle.userData?.gizmoType ??
+              "unknown";
+
+            /*
+             * A cylinder is aligned to local Y.
+             * Convert local Y into world space to obtain
+             * the actual axis direction.
+             */
+            const axisDirection = temp.current.axisDirection
+              .set(0, 1, 0)
+              .applyQuaternion(handleWorld.quaternion)
+              .normalize()
+              .clone();
+
+            const axisEnd = temp.current.axisEnd
+              .copy(handleWorld.position)
+              .add(
+                axisDirection.clone().multiplyScalar(0.5 * handleWorld.scale.y),
+              )
+              .clone();
+
+            console.groupCollapsed(`Axis/Handle: ${axis}`);
+
+            console.log("Object:", {
+              name: handle.name,
+              type: handle.type,
+              gizmoAxis: handle.userData?.gizmoAxis ?? null,
+              gizmoType: handle.userData?.gizmoType ?? null,
+            });
+
+            console.log("World position:", vectorRecord(handleWorld.position));
+
+            console.log("World axis direction:", vectorRecord(axisDirection));
+
+            console.log("Approx axis endpoint:", vectorRecord(axisEnd));
+
+            console.log("NDC position:", handleNDC.ndc);
+
+            console.log("Cursor → handle NDC distance:", handleNDC.distance);
+
+            console.log("Cursor → handle NDC delta:", {
+              dx: handleNDC.dx,
+              dy: handleNDC.dy,
+            });
+
+            console.log(
+              "Cursor ray → handle center:",
+              distanceFromRayToPoint(handleWorld.position),
+            );
+
+            /*
+             * Tell us whether this handle was actually
+             * hit by the scene raycaster.
+             */
+            const hit = gizmoHits.find(
+              (intersection) => intersection.object === handle,
+            );
+
+            console.log("Raycast hit:", Boolean(hit));
+
+            if (hit) {
+              console.log("Hit distance:", number(hit.distance));
+
+              console.log("Hit world point:", vectorRecord(hit.point));
+            }
+
+            console.groupEnd();
+          });
+
+          console.groupEnd();
+        });
+
+        console.groupEnd();
+      }
+
+      /*
+       * ---------------------------------------------------------
+       * GENERAL RAYCAST DIAGNOSTIC
+       * ---------------------------------------------------------
+       */
 
       console.groupCollapsed("[EDITOR_RAYCAST_HITS]");
 
-      console.log("hit count:", intersections.length);
+      console.log("Hit count:", intersections.length);
+
+      console.log("Gizmo hit count:", gizmoHits.length);
 
       intersections.forEach((hit, index) => {
         console.log(`hit[${index}]`, {
@@ -215,45 +555,60 @@ export default function EditorCursorProbe() {
           name: hit.object?.name,
           type: hit.object?.type,
           userData: hit.object?.userData,
-          distance: hit.distance,
-          point: hit.point?.clone(),
+          distance: number(hit.distance),
+          point: vectorRecord(hit.point),
+          isGizmo: isGizmoObject(hit.object),
         });
       });
 
       console.groupEnd();
 
-      if (!gizmoHit) {
+      /*
+       * ---------------------------------------------------------
+       * GIZMO HIT DETAIL
+       * ---------------------------------------------------------
+       */
+
+      const firstGizmoHit = gizmoHits[0] ?? null;
+
+      if (firstGizmoHit) {
+        const object = firstGizmoHit.object;
+
+        const world = getWorldTransform(object);
+
+        console.groupCollapsed("[GIZMO_POINTER]");
+
+        console.log(
+          "Axis:",
+          object.userData?.gizmoAxis ?? object.userData?.gizmoType ?? null,
+        );
+
+        console.log("Object:", object.name);
+
+        console.log("Gizmo world position:", vectorRecord(world.position));
+
+        console.log("Cursor NDC:", {
+          x: number(pointer.current.x, 5),
+          y: number(pointer.current.y, 5),
+        });
+
+        console.log("Gizmo NDC:", calculateCursorToNDCDistance(world.position));
+
+        console.log("Ray origin:", vectorRecord(raycaster.current.ray.origin));
+
+        console.log(
+          "Ray direction:",
+          vectorRecord(raycaster.current.ray.direction),
+        );
+
+        console.log("Intersection point:", vectorRecord(firstGizmoHit.point));
+
+        console.log("Intersection distance:", number(firstGizmoHit.distance));
+
+        console.groupEnd();
+      } else {
         console.log("[GIZMO_POINTER] NO GIZMO HIT");
-        return;
       }
-
-      const gizmoObject = gizmoHit.object;
-
-      const gizmoWorld = getGizmoWorldData(gizmoObject);
-
-      console.groupCollapsed("[GIZMO_POINTER]");
-
-      console.log("pointer:", pointer.current.clone());
-
-      console.log("ray.origin:", raycaster.current.ray.origin.clone());
-
-      console.log("ray.direction:", raycaster.current.ray.direction.clone());
-
-      console.log("gizmo object:", gizmoObject);
-
-      console.log("gizmo world position:", gizmoWorld.position.clone());
-
-      console.log("gizmo world quaternion:", gizmoWorld.quaternion.clone());
-
-      console.log("gizmo world scale:", gizmoWorld.scale.clone());
-
-      console.log("intersection distance:", gizmoHit.distance);
-
-      console.log("intersection point:", gizmoHit.point.clone());
-
-      console.log("intersection face:", gizmoHit.face);
-
-      console.groupEnd();
     }
 
     function onPointerEnter(event) {
@@ -268,16 +623,13 @@ export default function EditorCursorProbe() {
           x: event.clientX,
           y: event.clientY,
         },
+
         normalizedPointer: {
           x: result.x,
           y: result.y,
         },
       });
 
-      /*
-       * Run immediately when cursor enters the canvas.
-       * This establishes the first valid pointer/ray state.
-       */
       onPointerMove(event);
     }
 
@@ -286,11 +638,7 @@ export default function EditorCursorProbe() {
     }
 
     /*
-     * Camera diagnostic polling.
-     *
-     * This is deliberately lightweight.
-     * It lets us detect camera changes even when the
-     * camera controller does not dispatch an event.
+     * Camera monitoring.
      */
     let animationFrame;
 
