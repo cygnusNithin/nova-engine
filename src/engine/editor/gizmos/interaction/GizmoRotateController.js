@@ -12,15 +12,45 @@ class GizmoRotateController {
 
     this.rotating = false;
 
+    // ------------------------------------------------------------
+    // Rotation state
+    // ------------------------------------------------------------
+
     this.startRotation = new THREE.Euler();
+
+    this.accumulatedAngle = 0;
+
+    // ------------------------------------------------------------
+    // Vectors
+    // ------------------------------------------------------------
 
     this.startVector = new THREE.Vector3();
 
+    this.previousVector = new THREE.Vector3();
+
     this.currentVector = new THREE.Vector3();
+
+    this.axisVector = new THREE.Vector3();
+
+    this.crossVector = new THREE.Vector3();
+
+    // ------------------------------------------------------------
+    // Rotation plane
+    // ------------------------------------------------------------
 
     this.rotationPlane = new THREE.Plane();
 
     this.rotationCenter = new THREE.Vector3();
+
+    // ------------------------------------------------------------
+    // Temporary rotation
+    // ------------------------------------------------------------
+
+    this.nextRotation = new THREE.Euler();
+
+    // ------------------------------------------------------------
+    // Pointer state
+    // ------------------------------------------------------------
 
     this.pointerId = null;
 
@@ -42,13 +72,23 @@ class GizmoRotateController {
 
     this.startRotation.set(0, 0, 0);
 
+    this.accumulatedAngle = 0;
+
     this.startVector.set(0, 0, 0);
 
+    this.previousVector.set(0, 0, 0);
+
     this.currentVector.set(0, 0, 0);
+
+    this.axisVector.set(0, 0, 0);
+
+    this.crossVector.set(0, 0, 0);
 
     this.rotationPlane.set(new THREE.Vector3(0, 1, 0), 0);
 
     this.rotationCenter.set(0, 0, 0);
+
+    this.nextRotation.set(0, 0, 0);
 
     this.pointerId = null;
 
@@ -108,7 +148,13 @@ class GizmoRotateController {
 
     this.startVector.copy(startPoint).sub(center).normalize();
 
+    this.previousVector.copy(this.startVector);
+
     this.currentVector.copy(this.startVector);
+
+    this.setAxisVector(axis);
+
+    this.accumulatedAngle = 0;
 
     this.pointerId = pointerId;
 
@@ -155,44 +201,82 @@ class GizmoRotateController {
       return false;
     }
 
+    /*
+     * Calculate the current direction from the rotation center
+     * to the pointer intersection.
+     */
     this.currentVector.copy(currentPoint).sub(this.rotationCenter).normalize();
 
     if (
-      this.startVector.lengthSq() < 1e-8 ||
+      this.previousVector.lengthSq() < 1e-8 ||
       this.currentVector.lengthSq() < 1e-8
     ) {
       return false;
     }
 
-    const axisVector = this.getAxisVector(axis);
-
-    if (!axisVector) {
-      return false;
-    }
-
-    const angle = this.getSignedAngle(
-      this.startVector,
+    /*
+     * Calculate the SMALL signed angle between the previous
+     * pointer position and the current pointer position.
+     *
+     * This is intentionally incremental.
+     *
+     * We do NOT calculate:
+     *
+     * start → current
+     *
+     * because that angle is limited to ±PI.
+     *
+     * Instead:
+     *
+     * previous → current
+     *
+     * gives us a small step that can be accumulated indefinitely.
+     */
+    const deltaAngle = this.getSignedAngle(
+      this.previousVector,
       this.currentVector,
-      axisVector,
+      this.axisVector,
     );
 
-    if (!Number.isFinite(angle)) {
+    if (!Number.isFinite(deltaAngle)) {
       return false;
     }
 
-    const rotation = this.startRotation.clone();
+    /*
+     * Accumulate the angle.
+     *
+     * This allows continuous rotation:
+     *
+     * 0°
+     * 90°
+     * 180°
+     * 270°
+     * 360°
+     * 450°
+     * ...
+     */
+    this.accumulatedAngle += deltaAngle;
+
+    /*
+     * Apply the accumulated angle to the ORIGINAL rotation.
+     *
+     * This preserves the existing architecture where the
+     * transform is always calculated from the drag start state
+     * rather than accumulating transform values directly.
+     */
+    this.nextRotation.copy(this.startRotation);
 
     switch (axis) {
       case "x":
-        rotation.x = this.startRotation.x + angle;
+        this.nextRotation.x = this.startRotation.x + this.accumulatedAngle;
         break;
 
       case "y":
-        rotation.y = this.startRotation.y + angle;
+        this.nextRotation.y = this.startRotation.y + this.accumulatedAngle;
         break;
 
       case "z":
-        rotation.z = this.startRotation.z + angle;
+        this.nextRotation.z = this.startRotation.z + this.accumulatedAngle;
         break;
 
       default:
@@ -201,10 +285,16 @@ class GizmoRotateController {
 
     EditorTransform.setEntityRotation(
       entity,
-      rotation.x,
-      rotation.y,
-      rotation.z,
+      this.nextRotation.x,
+      this.nextRotation.y,
+      this.nextRotation.z,
     );
+
+    /*
+     * The current vector becomes the reference for the next
+     * frame.
+     */
+    this.previousVector.copy(this.currentVector);
 
     return true;
   }
@@ -212,6 +302,26 @@ class GizmoRotateController {
   // ============================================================
   // AXIS
   // ============================================================
+
+  setAxisVector(axis) {
+    switch (axis) {
+      case "x":
+        this.axisVector.set(1, 0, 0);
+        return true;
+
+      case "y":
+        this.axisVector.set(0, 1, 0);
+        return true;
+
+      case "z":
+        this.axisVector.set(0, 0, 1);
+        return true;
+
+      default:
+        this.axisVector.set(0, 0, 0);
+        return false;
+    }
+  }
 
   getAxisVector(axis) {
     switch (axis) {
@@ -234,21 +344,22 @@ class GizmoRotateController {
   // ============================================================
 
   getSignedAngle(from, to, axis) {
-    const cross = new THREE.Vector3().crossVectors(from, to);
+    this.crossVector.crossVectors(from, to);
 
     const dot = THREE.MathUtils.clamp(from.dot(to), -1, 1);
 
     /*
-     * atan2 gives us the full signed angle.
+     * atan2 gives us a signed angle in the range:
      *
-     * This is better than:
+     * -PI → +PI
      *
-     * acos(dot) + Math.sign(...)
+     * That's exactly what we want here because this function
+     * calculates only the SMALL incremental angle between two
+     * consecutive pointer positions.
      *
-     * because atan2 handles the sign and the 180-degree
-     * boundary much more reliably.
+     * The controller is responsible for accumulating it.
      */
-    return Math.atan2(cross.dot(axis), dot);
+    return Math.atan2(this.crossVector.dot(axis), dot);
   }
 
   // ============================================================
@@ -355,6 +466,14 @@ class GizmoRotateController {
 
   getPointerId() {
     return this.pointerId;
+  }
+
+  getAccumulatedAngle() {
+    return this.accumulatedAngle;
+  }
+
+  getAccumulatedDegrees() {
+    return THREE.MathUtils.radToDeg(this.accumulatedAngle);
   }
 }
 
