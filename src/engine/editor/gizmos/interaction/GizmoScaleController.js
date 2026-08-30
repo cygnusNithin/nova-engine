@@ -6,13 +6,46 @@ import GizmoState from "../GizmoState";
 
 class GizmoScaleController {
   constructor() {
+    // ============================================================
+    // SMOOTHING
+    // ============================================================
+
+    /*
+     * Higher values = faster response.
+     * Lower values = smoother / slower response.
+     */
+    this.smoothingSpeed = 18;
+
+    // ============================================================
+    // ENTITY / STATE
+    // ============================================================
+
     this.entity = null;
 
     this.axis = null;
 
     this.scaling = false;
 
+    // ============================================================
+    // SCALE STATE
+    // ============================================================
+
     this.startScale = new THREE.Vector3();
+
+    /*
+     * The actual scale currently applied to the entity.
+     * This smoothly moves toward nextScale.
+     */
+    this.currentScale = new THREE.Vector3();
+
+    /*
+     * The target scale calculated from the pointer position.
+     */
+    this.nextScale = new THREE.Vector3();
+
+    // ============================================================
+    // DRAG STATE
+    // ============================================================
 
     this.currentPoint = new THREE.Vector3();
 
@@ -20,7 +53,9 @@ class GizmoScaleController {
 
     this.delta = new THREE.Vector3();
 
-    this.nextScale = new THREE.Vector3();
+    // ============================================================
+    // AXIS / CAMERA STATE
+    // ============================================================
 
     this.scaleAxis = new THREE.Vector3();
 
@@ -28,10 +63,18 @@ class GizmoScaleController {
 
     this.cameraQuaternion = new THREE.Quaternion();
 
+    // ============================================================
+    // POINTER / DRAG PLANE
+    // ============================================================
+
     this.pointerId = null;
 
     this.pointerTarget = null;
 
+    /*
+     * Keep this exactly because GizmoInteraction uses
+     * GizmoState.dragPlane during the active transform.
+     */
     this.dragPlane = null;
 
     this.initialized = false;
@@ -73,6 +116,13 @@ class GizmoScaleController {
     this.scaling = true;
 
     this.startScale.copy(entity.transform.scale);
+
+    /*
+     * Start the smoothing state at the entity's current scale.
+     */
+    this.currentScale.copy(this.startScale);
+
+    this.nextScale.copy(this.startScale);
 
     this.startPoint.copy(startPoint);
 
@@ -124,7 +174,7 @@ class GizmoScaleController {
   // UPDATE
   // ============================================================
 
-  update(entity, axis, currentPoint, pointerId = null) {
+  update(entity, axis, currentPoint, pointerId = null, deltaTime = 1 / 60) {
     if (!this.scaling || !this.initialized) {
       return false;
     }
@@ -149,9 +199,17 @@ class GizmoScaleController {
       return false;
     }
 
+    // ==========================================================
+    // POINTER DELTA
+    // ==========================================================
+
     this.currentPoint.copy(currentPoint);
 
     this.delta.subVectors(this.currentPoint, this.startPoint);
+
+    // ==========================================================
+    // CALCULATE TARGET SCALE
+    // ==========================================================
 
     const amount = this.delta.dot(this.scaleAxis);
 
@@ -169,11 +227,31 @@ class GizmoScaleController {
       this.nextScale.z = Math.max(0.01, this.startScale.z * factor);
     }
 
+    // ==========================================================
+    // SMOOTH SCALE
+    // ==========================================================
+
+    /*
+     * Frame-rate-independent interpolation factor.
+     *
+     * This gives approximately the same smoothing behavior
+     * regardless of whether the engine runs at 30, 60, or 120 FPS.
+     */
+    const safeDeltaTime = Math.min(Math.max(deltaTime, 0), 0.1);
+
+    const smoothingFactor = 1 - Math.exp(-this.smoothingSpeed * safeDeltaTime);
+
+    this.currentScale.lerp(this.nextScale, smoothingFactor);
+
+    // ==========================================================
+    // APPLY SMOOTHED SCALE
+    // ==========================================================
+
     EditorTransform.setEntityScale(
       entity,
-      this.nextScale.x,
-      this.nextScale.y,
-      this.nextScale.z,
+      this.currentScale.x,
+      this.currentScale.y,
+      this.currentScale.z,
     );
 
     return true;
@@ -269,6 +347,8 @@ class GizmoScaleController {
 
     this.startScale.set(1, 1, 1);
 
+    this.currentScale.set(1, 1, 1);
+
     this.currentPoint.set(0, 0, 0);
 
     this.startPoint.set(0, 0, 0);
@@ -322,6 +402,24 @@ class GizmoScaleController {
   }
 
   // ============================================================
+  // SMOOTHING
+  // ============================================================
+
+  setSmoothingSpeed(value) {
+    if (!Number.isFinite(value) || value <= 0) {
+      return false;
+    }
+
+    this.smoothingSpeed = value;
+
+    return true;
+  }
+
+  getSmoothingSpeed() {
+    return this.smoothingSpeed;
+  }
+
+  // ============================================================
   // STATE
   // ============================================================
 
@@ -343,6 +441,14 @@ class GizmoScaleController {
 
   getPointerId() {
     return this.pointerId;
+  }
+
+  getCurrentScale() {
+    return this.currentScale.clone();
+  }
+
+  getTargetScale() {
+    return this.nextScale.clone();
   }
 }
 
