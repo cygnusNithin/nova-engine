@@ -6,13 +6,13 @@ import useEngineStore from "../../store/engineStore";
 
 import CameraManager from "./CameraManager";
 
-const DEBUG_CAMERA = true;
-
 export default function CameraController() {
   const { camera, events } = useThree();
 
   const keyboard = useEngineStore((state) => state.keyboard);
+
   const mouse = useEngineStore((state) => state.mouse);
+
   const editor = useEngineStore((state) => state.editor);
 
   const consumeMouseMotion = useEngineStore(
@@ -20,79 +20,68 @@ export default function CameraController() {
   );
 
   /*
-   * Persist diagnostic values between React renders.
+   * Remember the previous camera matrix.
+   *
+   * We only need to force an event recalculation when the
+   * camera has actually moved or rotated.
    */
-  const lastCameraPosition = useRef(null);
-  const lastCameraRotation = useRef(null);
+  const previousCameraMatrix = useRef(camera.matrixWorld.clone());
 
   useFrame((_, delta) => {
     /*
-     * Update the actual camera transform first.
+     * ============================================================
+     * 1. UPDATE CAMERA
+     * ============================================================
      */
+
     CameraManager(camera, keyboard, mouse, editor, delta);
 
     /*
-     * CameraManager can change position/orientation.
-     * Keep Three.js and R3F pointer calculations synchronized.
+     * ============================================================
+     * 2. UPDATE CAMERA MATRICES
+     * ============================================================
+     *
+     * The camera has been changed manually by CameraManager.
+     * Three.js must have the current world matrix before any
+     * pointer ray is calculated.
      */
-    camera.updateProjectionMatrix();
+
     camera.updateMatrixWorld(true);
 
     /*
-     * Recalculate R3F pointer ray using the current camera.
+     * ============================================================
+     * 3. CAMERA MOVED?
+     * ============================================================
      */
-    if (events?.update) {
+
+    const cameraChanged = !previousCameraMatrix.current.equals(
+      camera.matrixWorld,
+    );
+
+    /*
+     * ============================================================
+     * 4. RECALCULATE HOVER WITH CURRENT CAMERA
+     * ============================================================
+     *
+     * R3F normally raycasts when the pointer moves.
+     *
+     * But in this engine the camera can move while the cursor
+     * stays still. In that situation we must explicitly tell
+     * R3F to re-run the pointer intersection using the current
+     * camera.
+     */
+
+    if (cameraChanged && events?.update) {
       events.update();
+
+      previousCameraMatrix.current.copy(camera.matrixWorld);
     }
 
     /*
-     * Camera movement diagnostics.
-     *
-     * Only log when the camera actually changes.
+     * ============================================================
+     * 5. CONSUME CAMERA INPUT
+     * ============================================================
      */
-    if (DEBUG_CAMERA) {
-      const position = {
-        x: Number(camera.position.x.toFixed(4)),
-        y: Number(camera.position.y.toFixed(4)),
-        z: Number(camera.position.z.toFixed(4)),
-      };
-
-      const rotation = {
-        x: Number(camera.rotation.x.toFixed(4)),
-        y: Number(camera.rotation.y.toFixed(4)),
-        z: Number(camera.rotation.z.toFixed(4)),
-      };
-
-      const positionChanged =
-        !lastCameraPosition.current ||
-        position.x !== lastCameraPosition.current.x ||
-        position.y !== lastCameraPosition.current.y ||
-        position.z !== lastCameraPosition.current.z;
-
-      const rotationChanged =
-        !lastCameraRotation.current ||
-        rotation.x !== lastCameraRotation.current.x ||
-        rotation.y !== lastCameraRotation.current.y ||
-        rotation.z !== lastCameraRotation.current.z;
-
-      if (positionChanged || rotationChanged) {
-        console.groupCollapsed("[NOVA CAMERA] Camera updated");
-
-        console.log("Position:", position);
-        console.log("Rotation:", rotation);
-
-        console.log("Matrix world position:", {
-          x: Number(camera.matrixWorld.elements[12].toFixed(4)),
-          y: Number(camera.matrixWorld.elements[13].toFixed(4)),
-          z: Number(camera.matrixWorld.elements[14].toFixed(4)),
-        });
-
-        console.groupEnd();
-
-        lastCameraPosition.current = position;
-        lastCameraRotation.current = rotation;
-      }
-    }
 
     if (mouse.deltaX || mouse.deltaY || mouse.wheel) {
       consumeMouseMotion();
