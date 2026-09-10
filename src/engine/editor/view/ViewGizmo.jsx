@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import { createPortal } from "react-dom";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -16,6 +16,10 @@ export default function ViewGizmo() {
 
     return new THREE.Vector3(0, 0, 0);
   };
+
+  // ============================================================
+  // SNAP VIEW
+  // ============================================================
 
   const snapView = (direction, up) => {
     const target = getTarget();
@@ -35,7 +39,13 @@ export default function ViewGizmo() {
     camera.lookAt(target);
 
     camera.updateProjectionMatrix();
+
+    camera.updateMatrixWorld(true);
   };
+
+  // ============================================================
+  // PROJECTION
+  // ============================================================
 
   const toggleProjection = () => {
     const target = getTarget();
@@ -46,10 +56,10 @@ export default function ViewGizmo() {
 
     const up = camera.up.clone();
 
-    const distance = camera.position.distanceTo(target);
+    const distance = Math.max(camera.position.distanceTo(target), 8);
 
     // ==========================================================
-    // Perspective -> Orthographic
+    // PERSPECTIVE -> ORTHOGRAPHIC
     // ==========================================================
 
     if (camera.isPerspectiveCamera) {
@@ -74,11 +84,13 @@ export default function ViewGizmo() {
 
       nextCamera.up.copy(up);
 
-      nextCamera.zoom = 1;
-
       nextCamera.lookAt(target);
 
+      nextCamera.zoom = 1;
+
       nextCamera.updateProjectionMatrix();
+
+      nextCamera.updateMatrixWorld(true);
 
       set({
         camera: nextCamera,
@@ -88,7 +100,7 @@ export default function ViewGizmo() {
     }
 
     // ==========================================================
-    // Orthographic -> Perspective
+    // ORTHOGRAPHIC -> PERSPECTIVE
     // ==========================================================
 
     const nextCamera = new THREE.PerspectiveCamera(
@@ -108,18 +120,24 @@ export default function ViewGizmo() {
 
     nextCamera.updateProjectionMatrix();
 
+    nextCamera.updateMatrixWorld(true);
+
     set({
       camera: nextCamera,
     });
   };
 
+  // ============================================================
+  // BUTTON STYLE
+  // ============================================================
+
   const buttonStyle = {
-    width: 34,
+    width: 74,
     height: 28,
 
     border: "1px solid rgba(255,255,255,0.2)",
 
-    background: "rgba(25,25,25,0.82)",
+    background: "rgba(25,25,25,0.92)",
 
     color: "#ffffff",
 
@@ -136,12 +154,25 @@ export default function ViewGizmo() {
     alignItems: "center",
 
     justifyContent: "center",
+
+    padding: 0,
+
+    boxSizing: "border-box",
+
+    userSelect: "none",
   };
+
+  // ============================================================
+  // AXIS BUTTON
+  // ============================================================
 
   const axisButton = (label, direction, up) => (
     <button
       type="button"
       style={buttonStyle}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+      }}
       onClick={(event) => {
         event.stopPropagation();
 
@@ -152,103 +183,151 @@ export default function ViewGizmo() {
     </button>
   );
 
-  return (
-    <Html fullscreen zIndexRange={[1000, 0]}>
+  // ============================================================
+  // SCREEN SPACE UI
+  // ============================================================
+
+  const viewControls = (
+    <div
+      style={{
+        position: "fixed",
+
+        top: 128,
+        right: 10,
+
+        width: 160,
+
+        display: "flex",
+
+        flexDirection: "column",
+
+        alignItems: "center",
+
+        gap: 6,
+
+        padding: 8,
+
+        boxSizing: "border-box",
+
+        background: "rgba(20,20,20,0.88)",
+
+        border: "1px solid rgba(255,255,255,0.15)",
+
+        borderRadius: 6,
+
+        zIndex: 1100,
+
+        pointerEvents: "auto",
+
+        userSelect: "none",
+      }}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+      }}
+    >
+      {/* TOP / BOTTOM */}
+
       <div
         style={{
-          position: "absolute",
-
-          top: 14,
-          right: 14,
-
           display: "flex",
-          flexDirection: "column",
 
-          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        {axisButton(
+          "TOP",
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(0, 0, -1),
+        )}
 
-          gap: 6,
+        {axisButton(
+          "BOTTOM",
+          new THREE.Vector3(0, -1, 0),
+          new THREE.Vector3(0, 0, 1),
+        )}
+      </div>
 
-          pointerEvents: "auto",
+      {/* FRONT / BACK */}
 
-          userSelect: "none",
+      <div
+        style={{
+          display: "flex",
+
+          gap: 4,
+        }}
+      >
+        {axisButton(
+          "FRONT",
+          new THREE.Vector3(0, 0, 1),
+          new THREE.Vector3(0, 1, 0),
+        )}
+
+        {axisButton(
+          "BACK",
+          new THREE.Vector3(0, 0, -1),
+          new THREE.Vector3(0, 1, 0),
+        )}
+      </div>
+
+      {/* LEFT / RIGHT */}
+
+      <div
+        style={{
+          display: "flex",
+
+          gap: 4,
+        }}
+      >
+        {axisButton(
+          "LEFT",
+          new THREE.Vector3(-1, 0, 0),
+          new THREE.Vector3(0, 1, 0),
+        )}
+
+        {axisButton(
+          "RIGHT",
+          new THREE.Vector3(1, 0, 0),
+          new THREE.Vector3(0, 1, 0),
+        )}
+      </div>
+
+      {/* PERSPECTIVE / ORTHOGRAPHIC */}
+
+      <button
+        type="button"
+        style={{
+          ...buttonStyle,
+
+          width: 74,
         }}
         onPointerDown={(event) => {
           event.stopPropagation();
         }}
+        onClick={(event) => {
+          event.stopPropagation();
+
+          toggleProjection();
+        }}
       >
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-          }}
-        >
-          {axisButton(
-            "TOP",
-            new THREE.Vector3(0, 1, 0),
-            new THREE.Vector3(0, 0, -1),
-          )}
-
-          {axisButton(
-            "BOTTOM",
-            new THREE.Vector3(0, -1, 0),
-            new THREE.Vector3(0, 0, 1),
-          )}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-          }}
-        >
-          {axisButton(
-            "FRONT",
-            new THREE.Vector3(0, 0, 1),
-            new THREE.Vector3(0, 1, 0),
-          )}
-
-          {axisButton(
-            "BACK",
-            new THREE.Vector3(0, 0, -1),
-            new THREE.Vector3(0, 1, 0),
-          )}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-          }}
-        >
-          {axisButton(
-            "LEFT",
-            new THREE.Vector3(-1, 0, 0),
-            new THREE.Vector3(0, 1, 0),
-          )}
-
-          {axisButton(
-            "RIGHT",
-            new THREE.Vector3(1, 0, 0),
-            new THREE.Vector3(0, 1, 0),
-          )}
-        </div>
-
-        <button
-          type="button"
-          style={{
-            ...buttonStyle,
-
-            width: 74,
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-
-            toggleProjection();
-          }}
-        >
-          {camera.isOrthographicCamera ? "ORTHO" : "PERSP"}
-        </button>
-      </div>
-    </Html>
+        {camera.isOrthographicCamera ? "ORTHO" : "PERSP"}
+      </button>
+    </div>
   );
+
+  /*
+   * Render outside the R3F canvas.
+   *
+   * This is intentional:
+   *
+   * View controls are editor UI, not scene objects.
+   *
+   * createPortal keeps the React/R3F context while placing
+   * the actual DOM element directly in document.body.
+   */
+
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(viewControls, document.body);
 }
