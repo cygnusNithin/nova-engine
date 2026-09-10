@@ -6,7 +6,15 @@ export function updateEditorCamera(camera, keyboard, mouse, editor, delta) {
     ? editor.cameraSpeed * 2
     : editor.cameraSpeed;
 
+  // ------------------------------------------------------------
+  // ROTATION
+  // ------------------------------------------------------------
+
   updateCameraRotation(camera, mouse, editor.mouseSensitivity);
 
-  updateCameraMovement(camera, keyboard, mouse, speed, delta);
+  // ------------------------------------------------------------
+  // MOVEMENT
+  // ------------------------------------------------------------
+
+  updateCameraMovement(camera, keyboard, speed, delta, true);
 }

@@ -450,7 +450,6 @@ class GizmoScaleController {
   getTargetScale() {
     return this.nextScale.clone();
   }
-  //nithin
 }
 
 export default new GizmoScaleController();

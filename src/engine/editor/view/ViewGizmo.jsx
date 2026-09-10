@@ -1,11 +1,17 @@
-import { Html } from "@react-three/drei";
+import { createPortal } from "react-dom";
+
 import { useThree } from "@react-three/fiber";
+
 import * as THREE from "three";
 
 import useEngineStore from "../../../store/engineStore";
 
 export default function ViewGizmo() {
   const { camera, set, size } = useThree();
+
+  // ============================================================
+  // TARGET
+  // ============================================================
 
   const getTarget = () => {
     const selected = useEngineStore.getState().editor.selectedEntity;
@@ -16,6 +22,10 @@ export default function ViewGizmo() {
 
     return new THREE.Vector3(0, 0, 0);
   };
+
+  // ============================================================
+  // SNAP VIEW
+  // ============================================================
 
   const snapView = (direction, up) => {
     const target = getTarget();
@@ -35,26 +45,30 @@ export default function ViewGizmo() {
     camera.lookAt(target);
 
     camera.updateProjectionMatrix();
+
+    camera.updateMatrixWorld(true);
   };
+
+  // ============================================================
+  // PROJECTION
+  // ============================================================
 
   const toggleProjection = () => {
     const target = getTarget();
 
     const position = camera.position.clone();
 
-    const quaternion = camera.quaternion.clone();
-
     const up = camera.up.clone();
 
-    const distance = camera.position.distanceTo(target);
+    const distance = Math.max(camera.position.distanceTo(target), 8);
 
-    // ==========================================================
-    // Perspective -> Orthographic
-    // ==========================================================
+    const aspect = size.width / Math.max(size.height, 1);
+
+    // ----------------------------------------------------------
+    // PERSPECTIVE -> ORTHOGRAPHIC
+    // ----------------------------------------------------------
 
     if (camera.isPerspectiveCamera) {
-      const aspect = size.width / Math.max(size.height, 1);
-
       const halfHeight = Math.max(distance * 0.35, 4);
 
       const halfWidth = halfHeight * aspect;
@@ -70,15 +84,15 @@ export default function ViewGizmo() {
 
       nextCamera.position.copy(position);
 
-      nextCamera.quaternion.copy(quaternion);
-
       nextCamera.up.copy(up);
-
-      nextCamera.zoom = 1;
 
       nextCamera.lookAt(target);
 
+      nextCamera.zoom = 1;
+
       nextCamera.updateProjectionMatrix();
+
+      nextCamera.updateMatrixWorld(true);
 
       set({
         camera: nextCamera,
@@ -87,20 +101,13 @@ export default function ViewGizmo() {
       return;
     }
 
-    // ==========================================================
-    // Orthographic -> Perspective
-    // ==========================================================
+    // ----------------------------------------------------------
+    // ORTHOGRAPHIC -> PERSPECTIVE
+    // ----------------------------------------------------------
 
-    const nextCamera = new THREE.PerspectiveCamera(
-      60,
-      size.width / Math.max(size.height, 1),
-      0.1,
-      2000,
-    );
+    const nextCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 2000);
 
     nextCamera.position.copy(position);
-
-    nextCamera.quaternion.copy(quaternion);
 
     nextCamera.up.copy(up);
 
@@ -108,18 +115,26 @@ export default function ViewGizmo() {
 
     nextCamera.updateProjectionMatrix();
 
+    nextCamera.updateMatrixWorld(true);
+
     set({
       camera: nextCamera,
     });
   };
 
+  // ============================================================
+  // BUTTON STYLE
+  // ============================================================
+
   const buttonStyle = {
-    width: 34,
-    height: 28,
+    width: 42,
+    height: 30,
+
+    padding: 0,
 
     border: "1px solid rgba(255,255,255,0.2)",
 
-    background: "rgba(25,25,25,0.82)",
+    background: "rgba(25,25,25,0.92)",
 
     color: "#ffffff",
 
@@ -127,21 +142,38 @@ export default function ViewGizmo() {
 
     cursor: "pointer",
 
-    fontSize: 11,
+    fontSize: 10,
 
     fontWeight: 600,
+
+    lineHeight: 1,
 
     display: "flex",
 
     alignItems: "center",
 
     justifyContent: "center",
+
+    boxSizing: "border-box",
+
+    flexShrink: 0,
   };
+
+  // ============================================================
+  // VIEW BUTTON
+  // ============================================================
 
   const axisButton = (label, direction, up) => (
     <button
       type="button"
+      aria-label={`View ${label.toLowerCase()}`}
       style={buttonStyle}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+      }}
+      onPointerUp={(event) => {
+        event.stopPropagation();
+      }}
       onClick={(event) => {
         event.stopPropagation();
 
@@ -152,103 +184,164 @@ export default function ViewGizmo() {
     </button>
   );
 
-  return (
-    <Html fullscreen zIndexRange={[1000, 0]}>
+  // ============================================================
+  // CONTROLS
+  // ============================================================
+
+  const controls = (
+    <div
+      style={{
+        position: "fixed",
+
+        top: 14,
+
+        right: 14,
+
+        width: 138,
+
+        display: "flex",
+
+        flexDirection: "column",
+
+        alignItems: "stretch",
+
+        gap: 6,
+
+        pointerEvents: "auto",
+
+        userSelect: "none",
+
+        boxSizing: "border-box",
+
+        zIndex: 2147483647,
+
+        fontFamily: "Arial, Helvetica, sans-serif",
+      }}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+      }}
+      onPointerMove={(event) => {
+        event.stopPropagation();
+      }}
+      onPointerUp={(event) => {
+        event.stopPropagation();
+      }}
+      onWheel={(event) => {
+        event.stopPropagation();
+      }}
+    >
+      {/* ======================================================
+          TOP / BOTTOM
+          ====================================================== */}
+
       <div
         style={{
-          position: "absolute",
-
-          top: 14,
-          right: 14,
-
           display: "flex",
-          flexDirection: "column",
+          justifyContent: "center",
+          gap: 4,
+        }}
+      >
+        {axisButton(
+          "TOP",
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(0, 0, -1),
+        )}
 
-          alignItems: "center",
+        {axisButton(
+          "BOTTOM",
+          new THREE.Vector3(0, -1, 0),
+          new THREE.Vector3(0, 0, 1),
+        )}
+      </div>
 
-          gap: 6,
+      {/* ======================================================
+          FRONT / BACK
+          ====================================================== */}
 
-          pointerEvents: "auto",
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 4,
+        }}
+      >
+        {axisButton(
+          "FRONT",
+          new THREE.Vector3(0, 0, 1),
+          new THREE.Vector3(0, 1, 0),
+        )}
 
-          userSelect: "none",
+        {axisButton(
+          "BACK",
+          new THREE.Vector3(0, 0, -1),
+          new THREE.Vector3(0, 1, 0),
+        )}
+      </div>
+
+      {/* ======================================================
+          LEFT / RIGHT
+          ====================================================== */}
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 4,
+        }}
+      >
+        {axisButton(
+          "LEFT",
+          new THREE.Vector3(-1, 0, 0),
+          new THREE.Vector3(0, 1, 0),
+        )}
+
+        {axisButton(
+          "RIGHT",
+          new THREE.Vector3(1, 0, 0),
+          new THREE.Vector3(0, 1, 0),
+        )}
+      </div>
+
+      {/* ======================================================
+          PROJECTION
+          ====================================================== */}
+
+      <button
+        type="button"
+        aria-label="Toggle camera projection"
+        style={{
+          ...buttonStyle,
+
+          width: "100%",
         }}
         onPointerDown={(event) => {
           event.stopPropagation();
         }}
+        onPointerUp={(event) => {
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+
+          toggleProjection();
+        }}
       >
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-          }}
-        >
-          {axisButton(
-            "TOP",
-            new THREE.Vector3(0, 1, 0),
-            new THREE.Vector3(0, 0, -1),
-          )}
-
-          {axisButton(
-            "BOTTOM",
-            new THREE.Vector3(0, -1, 0),
-            new THREE.Vector3(0, 0, 1),
-          )}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-          }}
-        >
-          {axisButton(
-            "FRONT",
-            new THREE.Vector3(0, 0, 1),
-            new THREE.Vector3(0, 1, 0),
-          )}
-
-          {axisButton(
-            "BACK",
-            new THREE.Vector3(0, 0, -1),
-            new THREE.Vector3(0, 1, 0),
-          )}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-          }}
-        >
-          {axisButton(
-            "LEFT",
-            new THREE.Vector3(-1, 0, 0),
-            new THREE.Vector3(0, 1, 0),
-          )}
-
-          {axisButton(
-            "RIGHT",
-            new THREE.Vector3(1, 0, 0),
-            new THREE.Vector3(0, 1, 0),
-          )}
-        </div>
-
-        <button
-          type="button"
-          style={{
-            ...buttonStyle,
-
-            width: 74,
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-
-            toggleProjection();
-          }}
-        >
-          {camera.isOrthographicCamera ? "ORTHO" : "PERSP"}
-        </button>
-      </div>
-    </Html>
+        {camera.isOrthographicCamera ? "ORTHO" : "PERSP"}
+      </button>
+    </div>
   );
+
+  // ============================================================
+  // IMPORTANT
+  // ============================================================
+  //
+  // Do NOT render through <Html>.
+  //
+  // Render directly into document.body so the editor
+  // controls are independent of the Three.js camera,
+  // scene transforms and R3F Html wrapper.
+  //
+  // ============================================================
+
+  return createPortal(controls, document.body);
 }
