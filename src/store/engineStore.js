@@ -73,6 +73,29 @@ const useEngineStore = create((set) => ({
     }),
 
   // ============================================================
+  // CAMERA VIEW
+  // ============================================================
+
+  cameraViewRequest: null,
+
+  requestCameraView: (request) =>
+    set({
+      cameraViewRequest: request,
+    }),
+
+  clearCameraViewRequest: () =>
+    set({
+      cameraViewRequest: null,
+    }),
+
+  cameraProjection: "perspective",
+
+  setCameraProjection: (projection) =>
+    set({
+      cameraProjection: projection,
+    }),
+
+  // ============================================================
   // EDITOR
   // ============================================================
 

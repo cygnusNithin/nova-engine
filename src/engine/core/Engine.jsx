@@ -10,16 +10,20 @@ import initializeMouseInput from "../input/MouseInput";
 import initializeCameraShortcuts from "../camera/CameraShortcuts";
 
 import EditorManager from "../editor/EditorManager";
+import ViewGizmo from "../editor/view/ViewGizmo";
+
 import PerformanceManager from "../performance/PerformanceManager";
 
 export default function Engine() {
-  //--------------------------------------------------
-  // Initialize Input
-  //--------------------------------------------------
+  // ============================================================
+  // INITIALIZE INPUT
+  // ============================================================
 
   useEffect(() => {
     const disposeKeyboard = initializeKeyboardInput();
+
     const disposeMouse = initializeMouseInput();
+
     const disposeCameraShortcuts = initializeCameraShortcuts();
 
     return () => {
@@ -29,9 +33,9 @@ export default function Engine() {
     };
   }, []);
 
-  //--------------------------------------------------
-  // Disable Browser Context Menu
-  //--------------------------------------------------
+  // ============================================================
+  // DISABLE BROWSER CONTEXT MENU
+  // ============================================================
 
   useEffect(() => {
     const preventMenu = (event) => {
@@ -45,9 +49,9 @@ export default function Engine() {
     };
   }, []);
 
-  //--------------------------------------------------
-  // Prevent Browser Drag
-  //--------------------------------------------------
+  // ============================================================
+  // PREVENT BROWSER DRAG
+  // ============================================================
 
   useEffect(() => {
     const preventDrag = (event) => {
@@ -61,9 +65,9 @@ export default function Engine() {
     };
   }, []);
 
-  //--------------------------------------------------
-  // Render
-  //--------------------------------------------------
+  // ============================================================
+  // RENDER
+  // ============================================================
 
   return (
     <EngineProvider>
@@ -76,29 +80,35 @@ export default function Engine() {
           overflow: "hidden",
         }}
       >
-        {/* ================================================
+        {/* ======================================================
             3D ENGINE
-        ================================================= */}
+        ====================================================== */}
 
         <EngineCanvas />
 
-        {/* ================================================
+        {/* ======================================================
             EDITOR UI
-            Must stay OUTSIDE the R3F Canvas
-        ================================================= */}
+            OUTSIDE R3F CANVAS
+        ====================================================== */}
 
         <EditorManager />
 
-        {/* ================================================
+        {/* ======================================================
+            CAMERA VIEW UI
+            OUTSIDE R3F CANVAS
+        ====================================================== */}
+
+        <ViewGizmo />
+
+        {/* ======================================================
             PERFORMANCE UI
-            Must stay OUTSIDE the R3F Canvas
-        ================================================= */}
+        ====================================================== */}
 
         <PerformanceManager />
 
-        {/* ================================================
+        {/* ======================================================
             DEBUG UI
-        ================================================= */}
+        ====================================================== */}
 
         <KeyboardDebugger />
       </div>

@@ -4,8 +4,6 @@ import PhysicsRenderer from "./PhysicsRenderer";
 
 import { GizmoManager } from "../gizmos";
 
-import ViewGizmo from "../view/ViewGizmo";
-
 export default function EditorVisualManager() {
   return (
     <>
@@ -16,8 +14,6 @@ export default function EditorVisualManager() {
       <PhysicsRenderer />
 
       <GizmoManager />
-
-      <ViewGizmo />
     </>
   );
 }
