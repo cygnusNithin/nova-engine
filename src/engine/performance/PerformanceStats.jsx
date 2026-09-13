@@ -8,8 +8,9 @@ export default function PerformanceStats() {
     stats.showPanel(0);
 
     stats.dom.style.position = "fixed";
-    stats.dom.style.top = "10px";
+    stats.dom.style.top = "auto";
     stats.dom.style.right = "10px";
+    stats.dom.style.bottom = "10px";
     stats.dom.style.left = "auto";
     stats.dom.style.zIndex = "9999";
 

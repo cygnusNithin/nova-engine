@@ -49,6 +49,16 @@ export default function ViewGizmo() {
   };
 
   // ============================================================
+  // RESET
+  // ============================================================
+
+  const resetView = () => {
+    requestCameraView({
+      type: "reset",
+    });
+  };
+
+  // ============================================================
   // PROJECTION
   // ============================================================
 
@@ -167,6 +177,28 @@ export default function ViewGizmo() {
       </div>
 
       {/* ======================================================
+          RESET
+      ====================================================== */}
+
+      <button
+        type="button"
+        style={{
+          ...VIEW_BUTTON_STYLE,
+          width: 74,
+        }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+
+          resetView();
+        }}
+      >
+        RESET
+      </button>
+
+      {/* ======================================================
           PROJECTION
       ====================================================== */}
 
@@ -174,7 +206,6 @@ export default function ViewGizmo() {
         type="button"
         style={{
           ...VIEW_BUTTON_STYLE,
-
           width: 74,
         }}
         onPointerDown={(event) => {

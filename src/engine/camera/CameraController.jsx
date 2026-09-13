@@ -79,6 +79,30 @@ export default function CameraController() {
     camera.updateMatrixWorld(true);
   };
 
+  const resetView = () => {
+    const nextCamera = new THREE.PerspectiveCamera(
+      60,
+      size.width / Math.max(size.height, 1),
+      0.1,
+      2000,
+    );
+
+    nextCamera.position.set(0, 5, 12);
+
+    nextCamera.up.set(0, 1, 0);
+
+    nextCamera.lookAt(0, 0, 0);
+
+    nextCamera.updateProjectionMatrix();
+
+    nextCamera.updateMatrixWorld(true);
+
+    set({
+      camera: nextCamera,
+    });
+
+    setCameraProjection("perspective");
+  };
   // ============================================================
   // PROJECTION
   // ============================================================
@@ -183,6 +207,10 @@ export default function CameraController() {
         new THREE.Vector3(direction[0], direction[1], direction[2]),
         new THREE.Vector3(up[0], up[1], up[2]),
       );
+    }
+
+    if (type === "reset") {
+      resetView();
     }
 
     if (type === "projection") {
