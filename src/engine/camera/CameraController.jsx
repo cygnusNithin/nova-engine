@@ -8,6 +8,8 @@ import useEngineStore from "../../store/engineStore";
 
 import CameraManager from "./CameraManager";
 
+import { syncCameraRotation } from "./CameraRotation";
+
 export default function CameraController() {
   const { camera, events, size, set } = useThree();
 
@@ -33,9 +35,6 @@ export default function CameraController() {
 
   /*
    * Remember the previous camera matrix.
-   *
-   * We only need to force an event recalculation when the
-   * camera has actually moved or rotated.
    */
   const previousCameraMatrix = useRef(camera.matrixWorld.clone());
 
@@ -77,7 +76,27 @@ export default function CameraController() {
     camera.updateProjectionMatrix();
 
     camera.updateMatrixWorld(true);
+
+    // ----------------------------------------------------------
+    // IMPORTANT
+    //
+    // CameraRotation has its own yaw/pitch state.
+    //
+    // The snap changed the camera externally, so synchronize
+    // the rotation controller with the new camera orientation.
+    //
+    // TOP/BOTTOM receive special handling: their screen-up
+    // orientation is preserved until the first RMB movement.
+    // ----------------------------------------------------------
+
+    const isTopOrBottom = Math.abs(direction.y) > 0.5;
+
+    syncCameraRotation(camera, isTopOrBottom);
   };
+
+  // ============================================================
+  // RESET
+  // ============================================================
 
   const resetView = () => {
     const nextCamera = new THREE.PerspectiveCamera(
@@ -102,7 +121,11 @@ export default function CameraController() {
     });
 
     setCameraProjection("perspective");
+
+    // New camera object = new rotation state.
+    syncCameraRotation(nextCamera);
   };
+
   // ============================================================
   // PROJECTION
   // ============================================================
@@ -158,6 +181,8 @@ export default function CameraController() {
 
       setCameraProjection("orthographic");
 
+      syncCameraRotation(nextCamera);
+
       return;
     }
 
@@ -189,6 +214,8 @@ export default function CameraController() {
     });
 
     setCameraProjection("perspective");
+
+    syncCameraRotation(nextCamera);
   };
 
   // ============================================================
@@ -225,35 +252,35 @@ export default function CameraController() {
   // ============================================================
 
   useFrame((_, delta) => {
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
     // 1. UPDATE CAMERA
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
 
     CameraManager(camera, keyboard, mouse, editor, delta);
 
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
     // 2. PROCESS VIEW BUTTON
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
 
     processCameraViewRequest();
 
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
     // 3. UPDATE CAMERA MATRICES
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
 
     camera.updateMatrixWorld(true);
 
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
     // 4. CAMERA MOVED?
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
 
     const cameraChanged = !previousCameraMatrix.current.equals(
       camera.matrixWorld,
     );
 
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
     // 5. RECALCULATE HOVER
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
 
     if (cameraChanged && events?.update) {
       events.update();
@@ -261,9 +288,9 @@ export default function CameraController() {
       previousCameraMatrix.current.copy(camera.matrixWorld);
     }
 
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
     // 6. CONSUME CAMERA INPUT
-    // ----------------------------------------------------------
+    // --------------------------------------------------------
 
     if (mouse.deltaX || mouse.deltaY || mouse.wheel) {
       consumeMouseMotion();
